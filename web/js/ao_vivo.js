@@ -90,7 +90,7 @@ async function ligarWebcam() {
   botaoVerRede.disabled = false;
   ligado = true;
   historico = [];
-  mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro do oval.");
+  mostrarStatus(statusAoVivo, "Reconhecendo... olhe de frente para a câmera.");
   loopReconhecimento();
 }
 
@@ -109,11 +109,6 @@ function pararWebcam() {
   mostrarStatus(statusAoVivo, "Webcam desligada.");
 }
 
-function numeroDePessoas() {
-  // Lê o seletor "1 pessoa" / "2 pessoas"
-  return Number(document.querySelector('input[name="n_pessoas"]:checked').value);
-}
-
 // ---------- Loop de reconhecimento ----------
 
 async function loopReconhecimento() {
@@ -122,7 +117,7 @@ async function loopReconhecimento() {
     const inicio = performance.now();
     if (!congelado) {
       try {
-        const resposta = await enviarJSON("/api/reconhecer", { imagem: capturarQuadro(video, 0.8), n_pessoas: numeroDePessoas() });
+        const resposta = await enviarJSON("/api/reconhecer", { imagem: capturarQuadro(video, 0.8) });
         if (ligado && !congelado) desenharCaixas(resposta);
       } catch (erro) {
         mostrarStatus(statusAoVivo, erro.message, true);
@@ -140,9 +135,10 @@ function mediaDosUltimos(i, probabilidades) {
 }
 
 function desenharCaixas(resposta) {
-  // Desenha o oval-guia de cada caixa com o nome e a confiança: verde se reconhecido, vermelho ("desconhecido") se
-  // abaixo do limiar e cinza se a classe vencedora for "ninguem" (caixa vazia)
-  if (historico.length > resposta.caixas.length) historico = [];   // mudou de 2 para 1 pessoa: recomeça a média
+  // Desenha um oval em cada rosto encontrado, com o nome e a confiança: verde se reconhecido e vermelho
+  // ("desconhecido") se abaixo do limiar. Os rostos vêm do maior para o menor, então a caixa i costuma ser
+  // a mesma pessoa de um quadro para o outro.
+  if (historico.length !== resposta.caixas.length) historico = [];   // entrou ou saiu alguém: recomeça a média
   ctx.clearRect(0, 0, tela.width, tela.height);
   const tamanhoFonte = Math.round(tela.width / 28);
   ctx.font = `bold ${tamanhoFonte}px system-ui, sans-serif`;
@@ -153,25 +149,24 @@ function desenharCaixas(resposta) {
     const media = mediaDosUltimos(i, caixa.probabilidades);
     const melhor = media.indexOf(Math.max(...media));
     const reconhecido = media[melhor] >= limiar.value / 100;
-    const vazio = resposta.classes[melhor] === "ninguem";
-    const texto = vazio ? "ninguém" : reconhecido ? `${resposta.classes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)` : "desconhecido";
-    const cor = vazio ? "#6b7280" : reconhecido ? "#2ca02c" : "#d62728";
+    const texto = reconhecido ? `${resposta.classes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)` : "desconhecido";
+    const cor = reconhecido ? "#2ca02c" : "#d62728";
 
     // Se o vídeo está espelhado, espelhamos só a POSIÇÃO x da caixa; o texto continua desenhado normalmente
     const x = espelhar.checked ? tela.width - caixa.x - caixa.lado : caixa.x;
 
     ctx.strokeStyle = cor;
-    ctx.beginPath();                                                                 // oval-guia: o mesmo da máscara
+    ctx.beginPath();                                                                 // o mesmo oval da máscara
     ctx.ellipse(x + caixa.lado / 2, caixa.y + caixa.lado / 2, 0.40 * caixa.lado, 0.48 * caixa.lado, 0, 0, 2 * Math.PI);
     ctx.stroke();
     ctx.fillStyle = cor;
     ctx.fillRect(x, caixa.y, ctx.measureText(texto).width + 16, tamanhoFonte * 1.5);  // fundo do texto
     ctx.fillStyle = "#ffffff";
     ctx.fillText(texto, x + 8, caixa.y + tamanhoFonte * 1.15);                        // nome + confiança
-    leitura.push(`Caixa ${i + 1}: ${texto}`);
+    leitura.push(`Rosto ${i + 1}: ${texto}`);
   });
-  document.getElementById("leitura-ao-vivo").textContent = leitura.join(" · ");
-  mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro do oval.");
+  document.getElementById("leitura-ao-vivo").textContent = leitura.join(" · ") || "ninguém na imagem";
+  mostrarStatus(statusAoVivo, "Reconhecendo... olhe de frente para a câmera.");
 }
 
 // ---------- Botão "Ver o que a rede vê" ----------
@@ -186,7 +181,7 @@ async function verOQueARedeVe() {
   painel.hidden = false;
   try {
     const r = await enviarJSON("/api/etapas", { imagem: capturarQuadro(video, 0.9) });
-    const titulos = ["1. recorte do rosto", "2. tons de cinza", "3. 96×96", "4. equalizada", "5. máscara oval (entrada da CNN)"];
+    const titulos = ["1. rosto detectado", "2. 64×64", "3. CLAHE", "4. suavizada", "5. máscara oval (entrada da CNN)"];
     etapas.innerHTML = "";
     r.etapas.concat([r.gradcam]).forEach((src, i) => {
       const figura = document.createElement("figure");
@@ -223,5 +218,3 @@ limiar.addEventListener("input", () => {
   document.getElementById("limiar-valor").textContent = limiar.value + "%";
 });
 espelhar.addEventListener("change", () => video.classList.toggle("espelhado", espelhar.checked));
-document.querySelectorAll('input[name="n_pessoas"]').forEach((opcao) =>
-  opcao.addEventListener("change", () => { historico = []; }));   // nova divisão da tela: recomeça a média

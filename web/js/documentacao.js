@@ -167,8 +167,8 @@ function preencherResultados(r) {
 
   // Visão geral
   document.getElementById("resumo-geral").innerHTML = blocosDeNumeros([
-    [r.classes.filter((nome) => nome !== "ninguem").length, "integrantes"],   // "ninguem" é a classe do fundo vazio
-    [numero(r.totais.fotos), "fotos no dataset"],
+    [r.classes.length, "integrantes"],
+    [numero(r.totais.com_rosto), `fotos com rosto (de ${numero(r.totais.fotos)})`],
     [porcento(r.acuracias.teste), "acurácia no teste"],
     [numero(r.parametros_total), "parâmetros na rede"],
   ]);
@@ -180,10 +180,10 @@ function preencherResultados(r) {
   linhasDivisao.push(["<strong>total</strong>", r.totais.treino, r.totais.validacao, r.totais.teste]);
   document.getElementById("tabela-divisao").innerHTML =
     tabela(["Integrante", "Treino", "Validação", "Teste"], linhasDivisao, "total") +
-    `<p class="nota">Com o aumento de dados, o treino passa de ${numero(r.totais.treino)} para ` +
-    `${numero(r.totais.treino_com_aumento)} imagens (originais + 3 cópias modificadas).</p>`;
+    `<p class="nota">Com o aumento de dados, cada época de treino usa ${numero(r.totais.treino)} cópias novas ` +
+    `(giradas, ampliadas, deslocadas, espelhadas, com brilho e ruído sorteados).</p>`;
 
-  // Arquitetura: camada a camada, como no model.summary()
+  // Arquitetura: camada a camada (lista montada por resumo_camadas)
   const linhasCamadas = r.camadas.map((c) =>
     [`<code>${c.nome}</code>`, c.tipo, "(" + c.saida.join(", ") + ")", numero(c.parametros)]);
   linhasCamadas.push(["<strong>total</strong>", "", "", `<strong>${numero(r.parametros_total)}</strong>`]);

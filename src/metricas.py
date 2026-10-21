@@ -1,17 +1,10 @@
-# Matriz de confusão e métricas, calculadas só com NumPy (sem scikit-learn).
+# Métricas por integrante, a partir da matriz de confusão (que vem do scikit-learn).
 import numpy as np
 
 
-def matriz_confusao(y_real, y_previsto, n_classes):
-    # Conta cada par (real, previsto). Linhas = integrante real, colunas = integrante previsto.
-    matriz = np.zeros((n_classes, n_classes), dtype=int)
-    for real, previsto in zip(y_real, y_previsto):
-        matriz[real, previsto] += 1
-    return matriz
-
-
 def calcular_metricas(matriz):
-    # Tira VP, FP, FN e VN da matriz (um valor por integrante) e calcula as métricas
+    # Tira VP, FP, FN e VN da matriz (um valor por integrante) e calcula as métricas.
+    # Linhas = integrante real, colunas = integrante previsto.
     VP = np.diag(matriz)                      # diagonal: era X e a rede disse X
     FP = matriz.sum(axis=0) - VP              # resto da coluna: a rede disse X, mas era outra pessoa
     FN = matriz.sum(axis=1) - VP              # resto da linha: era X, mas a rede disse outra pessoa
@@ -29,8 +22,3 @@ def calcular_metricas(matriz):
         "precisao": precisao, "recall": recall, "f1": f1, "especificidade": especificidade,
         "acuracia": acuracia,
     }
-
-
-def acuracia(y_real, y_previsto):
-    # Fração de fotos em que a rede acertou
-    return float(np.mean(np.asarray(y_real) == np.asarray(y_previsto)))

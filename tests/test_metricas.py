@@ -2,7 +2,7 @@
 # Rodar na raiz do repositório com:  pytest
 import numpy as np
 
-from src.metricas import matriz_confusao, calcular_metricas
+from src.metricas import calcular_metricas
 
 # Matriz montada à mão (linhas = real, colunas = previsto), 16 fotos no total:
 #            prev 0  prev 1  prev 2
@@ -13,16 +13,6 @@ from src.metricas import matriz_confusao, calcular_metricas
 MATRIZ = np.array([[5, 1, 0],
                    [2, 3, 1],
                    [0, 0, 4]])
-
-
-def test_matriz_confusao_conta_os_pares():
-    # Cada par (real, previsto) soma 1 na célula correspondente
-    y_real     = [0, 0, 1, 2, 1]
-    y_previsto = [0, 1, 1, 2, 0]
-    esperado = np.array([[1, 1, 0],
-                         [1, 1, 0],
-                         [0, 0, 1]])
-    assert (matriz_confusao(y_real, y_previsto, 3) == esperado).all()
 
 
 def test_vp_fp_fn_vn():

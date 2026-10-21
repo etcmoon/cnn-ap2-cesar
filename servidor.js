@@ -14,7 +14,7 @@ const PASTA_WEB = path.join(RAIZ, "web");
 const PASTA_SRC = path.join(RAIZ, "src");
 const DATASET_DIR = process.env.DATASET_DIR || path.join(RAIZ, "dataset");   // mesma variável do src/config.py
 const CAMINHO_RESULTADOS = path.join(RAIZ, "modelo", "resultados.json");
-const CAMINHO_MODELO = path.join(RAIZ, "modelo", "modelo_cnn.keras");
+const CAMINHO_MODELO = path.join(RAIZ, "modelo", "modelo_cnn.npz");
 const MINIMO_FOTOS = 3;          // a divisão em treino/validação/teste precisa de pelo menos 3 fotos por pessoa
 const MSG_SEM_MODELO = "O modelo ainda não foi treinado: rode `python -m src.treinar` primeiro.";
 const PORTA = 5000;
@@ -26,7 +26,7 @@ let proximoId = 0;              // cada pedido ganha um número, que volta na re
 const pendentes = new Map();    // id do pedido -> funções que resolvem a Promise dele
 
 function caminhoDoPython() {
-  // Usa o Python do ambiente virtual .venv (onde o TensorFlow está instalado), se existir
+  // Usa o Python do ambiente virtual .venv (onde as bibliotecas estão instaladas), se existir
   const candidatos = [path.join(RAIZ, ".venv", "Scripts", "python.exe"), path.join(RAIZ, ".venv", "bin", "python")];
   return process.env.PYTHON || candidatos.find((c) => fs.existsSync(c)) || "python";
 }
@@ -119,11 +119,10 @@ const app = express();
 app.use(express.json({ limit: "100mb" }));   // as fotos da coleta chegam todas juntas, em base64
 app.use(express.static(PASTA_WEB));          // GET / entrega web/index.html; também css/, js/ e img/
 
-// Reconhecimento ao vivo: o Python recorta 1 ou 2 regiões fixas do quadro e devolve as probabilidades.
+// Reconhecimento ao vivo: o Python acha os rostos do quadro e devolve as probabilidades de cada um.
 // O servidor não guarda estado: a média dos últimos quadros é feita no JavaScript do navegador.
 app.post("/api/reconhecer", (req, res) => {
-  const n_pessoas = Number(req.body.n_pessoas) === 2 ? 2 : 1;
-  responderComPython(res, { acao: "reconhecer", imagem: req.body.imagem, n_pessoas });
+  responderComPython(res, { acao: "reconhecer", imagem: req.body.imagem });
 });
 
 // Botão "Ver o que a rede vê": as 5 etapas do pré-processamento, o Grad-CAM e a previsão (calculados no Python)
@@ -183,7 +182,7 @@ function iniciarTreino() {
   Object.assign(treino, { rodando: true, linhas: [], inicio: Date.now(), fim: null, codigo: null });
   processoTreino = spawn(caminhoDoPython(), ["-u", "-m", "src.treinar"], {   // -u: cada linha sai na hora
     cwd: RAIZ,
-    env: { ...process.env, PYTHONIOENCODING: "utf-8", TF_CPP_MIN_LOG_LEVEL: "2" },   // acentos certos e menos avisos do TF
+    env: { ...process.env, PYTHONIOENCODING: "utf-8" },   // acentos certos no log
   });
   const guardarLinha = (linha) => { if (linha.trim()) treino.linhas.push(linha); };
   readline.createInterface({ input: processoTreino.stdout }).on("line", guardarLinha);
@@ -199,7 +198,7 @@ function iniciarTreino() {
 // Começa um treino (só um por vez), depois de conferir se o dataset tem o mínimo necessário
 app.post("/api/treino", (req, res) => {
   if (treino.rodando) return res.status(409).json({ erro: "Já existe um treino em andamento." });
-  const integrantes = listarDataset().filter((i) => i.nome !== "ninguem");   // "ninguem" é a classe do fundo vazio
+  const integrantes = listarDataset();
   if (integrantes.length < 2) return res.status(400).json({ erro: "São necessários pelo menos 2 integrantes com fotos." });
   const comPoucas = integrantes.find((i) => i.fotos < MINIMO_FOTOS);
   if (comPoucas) return res.status(400).json({ erro: `${comPoucas.nome} tem só ${comPoucas.fotos} foto(s): o mínimo é ${MINIMO_FOTOS}.` });

@@ -8,14 +8,15 @@ import os
 import sys
 import json
 import base64
+import cv2
 import numpy as np
-import matplotlib
 from PIL import Image
 
 from src.config import CAMINHO_MODELO
 from src.dados import imagem_de_dataurl
+from src.modelo import carregar_modelo, prever
 from src.preprocessamento import preprocessar
-from src.reconhecimento import carregar_modelo, reconhecer_quadro, criar_modelo_gradcam, grad_cam
+from src.reconhecimento import reconhecer_quadro, grad_cam
 
 MSG_SEM_MODELO = "O modelo ainda não foi treinado: rode `python -m src.treinar` primeiro."
 
@@ -29,8 +30,8 @@ def obter_modelo():
         return None
     data = os.path.getmtime(CAMINHO_MODELO)
     if cache["data"] != data:
-        model, classes = carregar_modelo()
-        cache.update(data=data, model=model, classes=classes, gradcam=criar_modelo_gradcam(model))
+        params, classes = carregar_modelo(CAMINHO_MODELO)
+        cache.update(data=data, params=params, classes=classes)
     return cache
 
 
@@ -42,25 +43,26 @@ def png_base64(matriz):
 
 
 def reconhecer(m, pedido):
-    # Reconhecimento ao vivo: recorta o rosto de 1 ou 2 faixas fixas do quadro e devolve as probabilidades de cada uma
+    # Reconhecimento ao vivo: acha os rostos do quadro e devolve as probabilidades de cada um
     quadro = imagem_de_dataurl(pedido["imagem"])
-    return {"caixas": reconhecer_quadro(m["model"], quadro, pedido["n_pessoas"]), "classes": m["classes"]}
+    return {"caixas": reconhecer_quadro(m["params"], quadro), "classes": m["classes"]}
 
 
 def etapas(m, pedido):
     # Botão "Ver o que a rede vê": as etapas do pré-processamento, o Grad-CAM e a previsão
     quadro = imagem_de_dataurl(pedido["imagem"])
-    entrada, imagens = preprocessar(quadro, mostrar_etapas=True)      # imagens = [original, 1, 2, 3, 4, 5]
-    probs = m["model"](entrada[np.newaxis], training=False).numpy()[0]
+    entrada, imagens = preprocessar(quadro, mostrar_etapas=True)      # imagens = [cinza, 1, 2, 3, 4, 5]
+    if entrada is None:
+        return {"erro": "Nenhum rosto encontrado no quadro: olhe de frente para a câmera.", "status": 422}
+    probs = prever(m["params"], entrada[np.newaxis])[0]
 
     # Grad-CAM: mapa de calor colorido (escala "jet") misturado com a imagem de entrada em cinza
-    calor, _ = grad_cam(m["gradcam"], entrada)
-    colorido = matplotlib.colormaps["jet"](calor)[:, :, :3] * 255
-    mistura = 0.55 * entrada * 255 + 0.45 * colorido                  # (96,96,1) + (96,96,3) -> (96,96,3)
+    calor, _ = grad_cam(m["params"], entrada)
+    colorido = cv2.applyColorMap((calor * 255).astype(np.uint8), cv2.COLORMAP_JET)[:, :, ::-1]   # BGR -> RGB
+    mistura = 0.55 * entrada * 255 + 0.45 * colorido                  # (64,64,1) + (64,64,3) -> (64,64,3)
 
     return {
-        "etapas": [png_base64(imagens[1]), png_base64(imagens[2]), png_base64(imagens[3]),
-                   png_base64(imagens[4]), png_base64(entrada[:, :, 0] * 255)],
+        "etapas": [png_base64(img) for img in imagens[1:5]] + [png_base64(entrada[:, :, 0] * 255)],
         "gradcam": png_base64(mistura),
         "probabilidades": probs.tolist(),
         "classes": m["classes"],
@@ -79,7 +81,7 @@ def atender(pedido):
 
 
 def main():
-    sys.stdout = sys.stderr                # qualquer outro print (avisos do TensorFlow etc.) vai para o terminal,
+    sys.stdout = sys.stderr                # qualquer outro print vai para o terminal,
                                            # e o stdout fica só para as respostas ao Node
     obter_modelo()                         # já carrega o modelo, para o primeiro pedido não demorar
     print("Python pronto para receber pedidos.")

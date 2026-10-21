@@ -1,18 +1,16 @@
 # Gera as imagens intermediárias (PNG) que aparecem na documentação do site, em web/img/resultados/.
-# São os mesmos gráficos do notebook, mas salvos em arquivo em vez de exibidos na tela.
 import os
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")                      # desenha direto em arquivo, sem abrir janela
 import matplotlib.pyplot as plt
-from tensorflow import keras
 
-from src.config import IMAGENS_DIR
+from src.config import IMAGENS_DIR, SEED
 from src.dados import ler_imagem
 from src.preprocessamento import preprocessar
-from src.aumento import aumentar, variar_cena
-from src.reconhecimento import criar_modelo_gradcam, grad_cam
-from src.robustez import trocar_fundo
+from src.aumento import aumentar
+from src.modelo import propagar
+from src.reconhecimento import grad_cam
 
 
 def salvar(nome):
@@ -40,7 +38,7 @@ def fotos_originais(classes, caminhos, rotulos):
 
 def etapas_preprocessamento(classes, caminhos, rotulos):
     # As etapas do pré-processamento para a primeira foto de cada integrante, com o histograma antes/depois
-    titulos = ["original", "1. recorte", "2. cinza", "3. 96x96", "4. equalizada", "5. máscara oval"]
+    titulos = ["cinza", "1. recorte do rosto", "2. 64x64", "3. CLAHE", "4. suavizada", "5. máscara oval"]
     fig, eixos = plt.subplots(len(classes), 7, figsize=(19, 3 * len(classes)), squeeze=False)
     for numero, nome in enumerate(classes):
         primeira_foto = caminhos[list(rotulos).index(numero)]
@@ -49,24 +47,25 @@ def etapas_preprocessamento(classes, caminhos, rotulos):
             ax.imshow(img.astype(np.uint8), cmap="gray")
             ax.set_title(f"{nome}: {titulo}\n{img.shape[1]}x{img.shape[0]}", fontsize=9)
             ax.axis("off")
-        # Histograma: quantos pixels há de cada tom antes e depois da equalização
-        eixos[numero, 6].hist(etapas[3].ravel(), bins=50, alpha=0.6, label="antes")
-        eixos[numero, 6].hist(etapas[4].ravel(), bins=50, alpha=0.6, label="equalizada")
+        # Histograma: quantos pixels há de cada tom antes e depois do CLAHE
+        eixos[numero, 6].hist(etapas[2].ravel(), bins=50, alpha=0.6, label="antes")
+        eixos[numero, 6].hist(etapas[3].ravel(), bins=50, alpha=0.6, label="CLAHE")
         eixos[numero, 6].set_title("histograma dos tons", fontsize=9)
         eixos[numero, 6].legend(fontsize=8)
     plt.tight_layout()
     salvar("preprocessamento")
 
 
-def exemplos_aumento(classes, X_treino, X_distancia, y_treino, indice_ninguem):
-    # A mesma foto de treino modificada 6 vezes pelo aumento de dados (distância, troca de entorno e aumentar)
+def exemplos_aumento(classes, X_treino, y_treino):
+    # A mesma foto de treino modificada 6 vezes pelo aumento de dados
+    gerador = np.random.default_rng(SEED)
     fig, eixos = plt.subplots(len(classes), 7, figsize=(13, 2 * len(classes)), squeeze=False)
     for linha in range(len(classes)):
         i = np.where(y_treino == linha)[0][0]
         eixos[linha, 0].imshow(X_treino[i][:, :, 0], cmap="gray", vmin=0, vmax=1)
         eixos[linha, 0].set_title(f"{classes[linha]} (original)", fontsize=9)
         for coluna in range(1, 7):
-            copia = aumentar(variar_cena(i, X_treino, X_distancia, y_treino, indice_ninguem))
+            copia = aumentar(X_treino[i], gerador)
             eixos[linha, coluna].imshow(copia[:, :, 0], cmap="gray", vmin=0, vmax=1)
             eixos[linha, coluna].set_title(f"aumentada {coluna}", fontsize=9)
     for ax in eixos.ravel():
@@ -143,14 +142,14 @@ def fotos_erradas(X_teste, y_teste, y_previsto, classes):
     salvar("erros")
 
 
-def mapas_caracteristicas(model, foto, titulo):
-    # Saída das 4 camadas convolucionais para uma foto: os 8 primeiros mapas de cada camada.
-    # Um "modelo espião" devolve a saída das camadas intermediárias.
-    camadas = ["conv1", "conv2", "conv3", "conv4"]
-    espiao = keras.Model(model.input, [model.get_layer(nome).output for nome in camadas])
-    saidas = espiao.predict(foto[np.newaxis], verbose=0)    # np.newaxis: a rede espera um lote de fotos
+def mapas_caracteristicas(params, foto, titulo):
+    # Saída das 3 camadas convolucionais para uma foto: os 8 primeiros mapas de cada camada.
+    # Os mapas já ficam guardados no cache do propagar (é o que a retropropagação usa).
+    camadas = ["conv1", "conv2", "conv3"]
+    _, cache = propagar(params, foto[np.newaxis])           # np.newaxis: a rede espera um lote de fotos
+    saidas = [z for _, z, _ in cache["convs"]]
 
-    fig, eixos = plt.subplots(len(camadas), 9, figsize=(15.5, 7.5))
+    fig, eixos = plt.subplots(len(camadas), 9, figsize=(15.5, 5.8))
     for linha, (nome, mapas) in enumerate(zip(camadas, saidas)):
         eixos[linha, 0].axis("off")
         for coluna in range(8):
@@ -164,14 +163,13 @@ def mapas_caracteristicas(model, foto, titulo):
     salvar("mapas")
 
 
-def gradcam_por_integrante(model, X_teste, y_teste, classes):
+def gradcam_por_integrante(params, X_teste, y_teste, classes):
     # Uma foto de teste de cada integrante: imagem em cima, mapa de calor do Grad-CAM embaixo
-    modelo_gradcam = criar_modelo_gradcam(model)
     n = len(classes)
     fig, eixos = plt.subplots(2, n, figsize=(3 * n, 6), squeeze=False)
     for c in range(n):
         img = X_teste[y_teste == c][0]
-        calor, previsto = grad_cam(modelo_gradcam, img)
+        calor, previsto = grad_cam(params, img)
         eixos[0, c].imshow(img[:, :, 0], cmap="gray")
         eixos[0, c].set_title(f"real: {classes[c]}")
         eixos[1, c].imshow(img[:, :, 0], cmap="gray")
@@ -182,27 +180,3 @@ def gradcam_por_integrante(model, X_teste, y_teste, classes):
     plt.tight_layout()
     salvar("gradcam")
 
-
-def grafico_troca_de_fundo(troca, X_teste, y_teste, classes):
-    # Um exemplo da troca (rosto de um integrante + entorno de outro) e, ao lado, o resultado do teste
-    rosto, entorno = X_teste[y_teste == 0][0], X_teste[y_teste == 1][0]
-    fig, eixos = plt.subplots(1, 4, figsize=(14, 3.4), gridspec_kw={"width_ratios": [1, 1, 1, 2.6]})
-    imagens = [rosto, entorno, trocar_fundo(rosto, entorno)]
-    titulos = [f"rosto: {classes[0]}", f"entorno: {classes[1]}", "imagem montada"]
-    for ax, img, titulo in zip(eixos[:3], imagens, titulos):
-        ax.imshow(img[:, :, 0], cmap="gray", vmin=0, vmax=1)
-        ax.set_title(titulo, fontsize=10)
-        ax.axis("off")
-
-    nomes = ["imagem montada:\nresponde o dono do ROSTO", "imagem montada:\nresponde o dono do ENTORNO",
-             "foto vazia:\nresponde “ninguém”"]
-    valores = [troca["segue_o_rosto"], troca["segue_o_entorno"], troca["vazio_e_ninguem"]]
-    barras = eixos[3].barh(nomes, valores, height=0.5, color="#4878a8")
-    eixos[3].bar_label(barras, labels=[f"{v:.0%}" for v in valores], padding=4)
-    eixos[3].set_xlim(0, 1.12)
-    eixos[3].invert_yaxis()                                  # a primeira barra fica em cima
-    eixos[3].xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
-    eixos[3].spines[["top", "right"]].set_visible(False)
-    eixos[3].set_title("fotos de teste (o ideal: 1ª e 3ª barras altas, 2ª baixa)", fontsize=10)
-    plt.tight_layout()
-    salvar("troca_de_fundo")

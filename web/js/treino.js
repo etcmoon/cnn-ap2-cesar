@@ -34,19 +34,17 @@ async function atualizarDataset() {
     tabela.appendChild(linha);
   });
 
-  // Bloqueios (impedem o treino) e dicas (só avisam). A pasta "ninguem" (fundo vazio) não conta como integrante.
+  // Bloqueios (impedem o treino) e dicas (só avisam).
   bloqueios = [];
   const dicas = [];
-  const pessoas = integrantes.filter((i) => i.nome !== "ninguem");
-  if (pessoas.length < 2) bloqueios.push("Colete fotos de pelo menos 2 integrantes.");
-  if (pessoas.length === integrantes.length) dicas.push("Opcional: colete também fotos com o nome “ninguem”, com a câmera apontada para o lugar vazio (cadeira, parede). A rede aprende a responder “ninguém”.");
-  pessoas.forEach((i) => {
+  if (integrantes.length < 2) bloqueios.push("Colete fotos de pelo menos 2 integrantes.");
+  integrantes.forEach((i) => {
     if (i.fotos < d.minimo_fotos) bloqueios.push(`${i.nome}: só ${i.fotos} foto(s); o mínimo é ${d.minimo_fotos}.`);
     else if (i.fotos < RECOMENDADO) dicas.push(`${i.nome}: ${i.fotos} fotos. O recomendado é ${RECOMENDADO} ou mais, em sessões diferentes.`);
   });
-  const menor = Math.min(...pessoas.map((i) => i.fotos));
-  const maiorPessoa = Math.max(1, ...pessoas.map((i) => i.fotos));
-  if (pessoas.length >= 2 && maiorPessoa > 2 * menor) dicas.push("As quantidades estão bem diferentes entre as pessoas: tentem deixá-las parecidas.");
+  const menor = Math.min(...integrantes.map((i) => i.fotos));
+  const maiorPessoa = Math.max(1, ...integrantes.map((i) => i.fotos));
+  if (integrantes.length >= 2 && maiorPessoa > 2 * menor) dicas.push("As quantidades estão bem diferentes entre as pessoas: tentem deixá-las parecidas.");
   const avisos = document.getElementById("dataset-avisos");
   avisos.innerHTML = "";
   bloqueios.map((t) => [t, "bloqueio"]).concat(dicas.map((t) => [t, "dica"])).forEach(([texto, tipo]) => {
@@ -135,12 +133,12 @@ function desenharTreino(estado) {
   if (!estado.rodando) return;
 
   statusTreino.hidden = true;
-  const etapa = ultima(estado.linhas, /^Etapa (\d)\/8: (.*)/);            // "Etapa 6/8: treinamento (até 60 épocas)"
-  const epoca = ultima(estado.linhas, /^Epoch (\d+)\/(\d+)/);             // "Epoch 12/60" (impresso pelo Keras)
+  const etapa = ultima(estado.linhas, /^Etapa (\d)\/8: (.*)/);            // "Etapa 6/8: treinamento (até 150 épocas)"
+  const epoca = ultima(estado.linhas, /^Época (\d+)\/(\d+)/);             // "Época 12/150" (impresso por treinar_rede)
   const validacao = ultima(estado.linhas, /val_accuracy: ([\d.]+)/);      // acurácia na validação da última época
   const n = etapa ? Number(etapa[1]) : 0;
   const ep = epoca ? Number(epoca[1]) : 0;
-  const total = epoca ? Number(epoca[2]) : 60;
+  const total = epoca ? Number(epoca[2]) : 150;
 
   // A etapa 6 (treinamento) é a mais demorada: ela ocupa de 10% a 90% da barra, conforme as épocas
   const pct = n <= 5 ? n * 2 : n === 6 ? 10 + 80 * (ep / total) : n === 7 ? 92 : 96;
@@ -149,7 +147,7 @@ function desenharTreino(estado) {
 
   let detalhe = `Tempo: ${formatarTempo(Date.now() - estado.inicio)}`;
   if (n === 6 && ep) {
-    detalhe = `Época ${ep} de ${total} (o EarlyStopping pode parar antes)` +
+    detalhe = `Época ${ep} de ${total} (a parada antecipada pode parar antes)` +
       (validacao ? ` · acurácia na validação: ${(Number(validacao[1]) * 100).toFixed(0)}%` : "") + ` · ${detalhe}`;
   }
   document.getElementById("treino-detalhe").textContent = detalhe;

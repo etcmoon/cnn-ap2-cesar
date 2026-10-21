@@ -1,10 +1,9 @@
 # Leitura das fotos do dataset (a gravação das fotos coletadas no site é feita pelo servidor Node).
-# O PIL é usado SOMENTE para abrir arquivos de imagem; o resto é NumPy.
 import os
 import io
 import base64
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 
 from src.config import DATASET_DIR
@@ -16,14 +15,8 @@ EXTENSOES = (".jpg", ".jpeg", ".png", ".heic", ".heif")    # tipos de arquivo ac
 
 def ler_imagem(caminho):
     # Abre o arquivo e devolve uma matriz (altura, largura, 3) com os valores R, G, B de cada pixel.
-    # Celulares às vezes salvam a foto "deitada" e anotam a rotação certa no EXIF; nesse caso, desviramos a matriz.
-    img = Image.open(caminho)
-    orientacao = img.getexif().get(274, 1)    # 274 = código do EXIF que guarda a orientação
-    pixels = np.array(img.convert("RGB"))
-    if orientacao == 3: pixels = np.rot90(pixels, 2)    # foto de cabeça para baixo -> gira 180°
-    if orientacao == 6: pixels = np.rot90(pixels, -1)   # foto deitada -> gira 90° no sentido horário
-    if orientacao == 8: pixels = np.rot90(pixels, 1)    # foto deitada -> gira 90° no sentido anti-horário
-    return pixels
+    # Celulares às vezes salvam a foto "deitada" e anotam a rotação certa no EXIF: o exif_transpose desvira a foto.
+    return np.array(ImageOps.exif_transpose(Image.open(caminho)).convert("RGB"))
 
 
 def listar_dataset(pasta=DATASET_DIR):

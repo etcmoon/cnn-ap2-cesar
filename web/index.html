@@ -38,12 +38,6 @@
         <button id="parar" class="botao" disabled>Parar</button>
       </div>
 
-      <fieldset class="campo">
-        <legend>Pessoas na frente da câmera</legend>
-        <label><input type="radio" name="n_pessoas" value="1" checked> 1 pessoa (oval central)</label>
-        <label><input type="radio" name="n_pessoas" value="2"> 2 pessoas (caixas lado a lado)</label>
-      </fieldset>
-
       <label class="campo" for="limiar">
         <span>Limiar de confiança: <strong><output id="limiar-valor">60%</output></strong></span>
         <input type="range" id="limiar" min="30" max="95" step="5" value="60">
@@ -93,14 +87,13 @@
               <button id="coleta-iniciar" class="botao principal">Iniciar captura</button>
             </div>
           </div>
-          <!-- Vídeo da coleta com o oval-guia por cima (o oval é só um desenho: não aparece nas fotos salvas) -->
+          <!-- Vídeo da coleta (o detector acha o rosto no treino: não há guia na tela) -->
           <div class="moldura pequena">
             <video id="coleta-video" class="espelhado" playsinline muted></video>
-            <canvas id="coleta-guia"></canvas>
             <p id="coleta-contagem" class="contagem"></p>
           </div>
         </div>
-        <p id="coleta-status" class="status">Clique em “Ver câmera”, encaixe o rosto no oval e então em “Iniciar captura”.
+        <p id="coleta-status" class="status">Clique em “Ver câmera”, olhe de frente para a câmera e então em “Iniciar captura”.
           Mexa levemente a cabeça durante a captura. Façam 2 ou 3 capturas por pessoa, em lugares e iluminações diferentes.</p>
       </section>
 
@@ -168,18 +161,20 @@
         <h2><span class="numero">1</span> Visão geral</h2>
         <p class="resumo">Treinamos <strong>do zero</strong> uma Rede Neural Convolucional (CNN) que recebe a foto de um
           rosto e diz qual integrante do grupo ela é.</p>
-        <p>Não usamos modelo pré-treinado nem detector de rosto pronto: todo o tratamento das imagens e as métricas foram
-          programados por nós com NumPy. A biblioteca TensorFlow/Keras é usada só para montar e treinar a rede.</p>
+        <p>A <strong>CNN é inteira feita por nós</strong>, só com NumPy: as convoluções, o pooling, a retropropagação
+          (backpropagation), o otimizador Adam, o dropout e a parada antecipada. Não usamos TensorFlow, Keras, PyTorch nem
+          modelo pré-treinado. O resto do pipeline (achar o rosto na foto, corrigir a imagem, métricas) usa bibliotecas
+          prontas, como OpenCV e scikit-learn, porque não é o foco do trabalho.</p>
         <div class="numeros" id="resumo-geral"></div>
 
         <h3>O caminho de uma foto</h3>
         <ol class="fluxo">
           <li>Foto da webcam<small>dataset/&lt;nome&gt;/</small></li>
-          <li>Pré-processamento<small>rosto, oval, 96×96, cinza</small></li>
-          <li>Divisão<small>treino · validação · teste + “ninguém”</small></li>
-          <li>Aumento<small>só no treino</small></li>
-          <li>CNN<small>4 convoluções</small></li>
-          <li>Treino<small>Adam + EarlyStopping</small></li>
+          <li>Pré-processamento<small>detector, 64×64, CLAHE, oval</small></li>
+          <li>Divisão<small>treino · validação · teste</small></li>
+          <li>Aumento<small>a cada lote do treino</small></li>
+          <li>CNN<small>3 convoluções, feita à mão</small></li>
+          <li>Treino<small>backprop + Adam</small></li>
           <li>Avaliação<small>matriz e métricas</small></li>
           <li>Ao vivo<small>webcam no site</small></li>
         </ol>
@@ -195,11 +190,12 @@
         <div class="tabela-rolagem"><table>
           <thead><tr><th>Etapa</th><th>Ferramenta</th></tr></thead>
           <tbody>
-            <tr><td>Abrir e salvar o arquivo .jpg/.png/.heic</td><td><code>PIL</code> + <code>pillow-heif</code> para .heic (só transforma o arquivo em uma matriz de números)</td></tr>
-            <tr><td>Recorte do rosto, tons de cinza, redimensionamento, equalização, máscara oval, aumento de dados, divisão dos dados, exemplos de “ninguém”, teste de troca de fundo</td><td><strong>código próprio com NumPy</strong></td></tr>
-            <tr><td>Montar e treinar a CNN</td><td>TensorFlow/Keras, <strong>sem modelo pré-treinado</strong></td></tr>
-            <tr><td>Matriz de confusão e métricas</td><td><strong>código próprio com NumPy</strong></td></tr>
-            <tr><td>Grad-CAM (mapa de calor)</td><td><strong>código próprio</strong> sobre a nossa CNN; o TensorFlow só calcula o gradiente (o mesmo cálculo que usa no treino) e a ampliação bilinear é NumPy</td></tr>
+            <tr><td>Abrir e salvar o arquivo .jpg/.png/.heic</td><td><code>PIL</code> + <code>pillow-heif</code> para .heic</td></tr>
+            <tr><td>Achar o rosto na foto</td><td>detector Haar do <code>OpenCV</code> (clássico, de 2001: só diz <em>onde</em> há um rosto, não <em>quem</em> é)</td></tr>
+            <tr><td>Tons de cinza, redimensionamento, CLAHE, suavização, aumento de dados</td><td><code>OpenCV</code></td></tr>
+            <tr><td><strong>A CNN inteira:</strong> convolução, pooling, densa, softmax, retropropagação, Adam, dropout, parada antecipada, Grad-CAM</td><td><strong>código próprio, só com NumPy</strong> (<code>src/modelo.py</code>)</td></tr>
+            <tr><td>Máscara oval e divisão dos dados em blocos</td><td>código próprio com NumPy</td></tr>
+            <tr><td>Matriz de confusão e acurácia</td><td><code>scikit-learn</code>; precisão, recall, F1 e especificidade calculados por nós a partir da matriz</td></tr>
             <tr><td>Gráficos e imagens intermediárias</td><td><code>matplotlib</code></td></tr>
             <tr><td>Servidor local (HTTP, fotos, resultados, treino pelo site)</td><td>Node.js com <code>Express</code></td></tr>
             <tr><td>Rede neural ao vivo</td><td>processo Python (<code>src/servico.py</code>) aberto pelo Node, sem servidor web</td></tr>
@@ -226,22 +222,9 @@
         <ol class="passos">
           <li><strong>Escolher o nome.</strong> O nome digitado vira o nome da pasta, então ele é padronizado: minúsculas,
             sem acento e sem espaço (“Ana Clara” vira <code>ana_clara</code>).</li>
-          <li><strong>Ver a câmera e se posicionar no oval.</strong> O botão “Ver câmera” liga a webcam antes da captura e
-            desenha por cima do vídeo um oval tracejado, escurecendo o resto. É <strong>exatamente</strong> a região que o
-            pré-processamento recorta e mantém (seção 4) e o mesmo oval do reconhecimento ao vivo. Assim, as fotos de treino
-            já saem com o rosto no lugar certo. O oval é só um desenho na tela: as fotos salvas não o têm.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-js="coleta.js#desenharOvalGuia"></pre>
-              <ol class="notas">
-                <li data-trecho="const lado = Math.min(largura, altura) * FRACAO_ROSTO">O quadrado do rosto: 60% do menor lado, a mesma conta de <code>caixa_do_rosto</code>.</li>
-                <li data-trecho="const cy = Math.min(Math.max(altura * ALTURA_ROSTO">O centro fica a 45% da altura, sem deixar o quadrado sair da tela.</li>
-                <li data-trecho="ctx.fillRect(0, 0, largura, altura)">Escurece o vídeo inteiro...</li>
-                <li data-trecho='ctx.globalCompositeOperation = "destination-out"'>...e “recorta” o oval, que volta a mostrar o vídeo normal.</li>
-                <li data-trecho="ctx.setLineDash([12, 8])">Contorna o oval com uma linha tracejada.</li>
-              </ol>
-            </details>
-          </li>
+          <li><strong>Ver a câmera e se posicionar.</strong> O botão “Ver câmera” liga a webcam antes da captura. Não há guia
+            na tela: no treino, o detector de rostos acha o rosto em qualquer lugar da foto (seção 4). Basta olhar de frente,
+            com o rosto inteiro visível.</li>
           <li><strong>Ligar a câmera (se ainda não estiver ligada) e esperar 3 segundos.</strong> O navegador pede permissão
             para usar a webcam e faz uma contagem regressiva para a pessoa se posicionar.</li>
           <li><strong>Tirar as fotos.</strong> A cada 250 ms, o quadro do vídeo é copiado para um <code>&lt;canvas&gt;</code>
@@ -255,7 +238,7 @@
               <ol class="notas">
                 <li data-trecho="const nome = normalizarNome(">Passo 1: padroniza o nome digitado, que vira o nome da pasta.</li>
                 <li data-trecho="const previaLigada = streamColeta !== null">Lembra se a câmera já estava ligada pela prévia (nesse caso, ela continua ligada no fim).</li>
-                <li data-trecho="await ligarCameraColeta()">Passo 3: liga a webcam, se ainda não estiver ligada, e desenha o oval.</li>
+                <li data-trecho="await ligarCameraColeta()">Passo 3: liga a webcam, se ainda não estiver ligada.</li>
                 <li data-trecho="for (let s = 3; s > 0; s--)">Passo 3: contagem regressiva de 3 segundos, um número por segundo.</li>
                 <li data-trecho="fotos.push(capturarQuadro(videoColeta, 0.9))">Passo 4: copia o quadro atual do vídeo como JPEG (qualidade 90%) e guarda na lista.</li>
                 <li data-trecho="await esperar(250)">Passo 4: espera 250 ms antes da próxima foto.</li>
@@ -282,15 +265,14 @@
           <li>Façam 3 ou mais capturas por pessoa, em lugares e iluminações diferentes.</li>
           <li><strong>Todos nos mesmos lugares:</strong> se cada pessoa for fotografada em um cenário só dela, o cenário vira
             uma pista mais fácil que o rosto. Fotografem todos no quarto, todos na sala, e assim por diante.</li>
-          <li>Mantenham o rosto dentro do oval e mexam levemente a cabeça durante a captura.</li>
-          <li><strong>Perto e longe:</strong> tirem fotos com o rosto mais perto e mais longe da câmera. Se uma classe só
-            aparece de perto, a distância vira pista (veja o caso abaixo).</li>
+          <li>Olhem de frente para a câmera e mexam levemente a cabeça durante a captura. Fotos de perfil, de costas ou com
+            o rosto tampado são descartadas no treino, porque o detector não acha o rosto nelas.</li>
+          <li><strong>Perto e longe:</strong> tirem fotos com o rosto mais perto e mais longe da câmera (veja o caso abaixo).</li>
           <li>Usem quantidades parecidas de fotos por pessoa (algo entre 150 e 300).</li>
           <li><strong>Confiram as pastas antes de treinar:</strong> cada pasta deve ter só fotos daquela classe. A rede
             aprende exatamente o que os rótulos dizem, inclusive os erros.</li>
-          <li><strong>Fotos de “ninguém” (opcional, mas ajuda muito):</strong> coletem fotos com o nome <code>ninguem</code>,
-            com a câmera apontada para os lugares vazios (a cadeira, a parede, a cama). Elas ensinam a rede a responder
-            “ninguém” quando não há pessoa no oval. Mesmo sem elas, o treino cria exemplos de fundo sozinho (seção 5).</li>
+          <li><strong>Não existe mais a pasta <code>ninguem</code>.</strong> Se ela sobrou de uma versão antiga, movam-na
+            para <code>dataset/_descartadas/</code>: agora “ninguém” é quando o detector não acha rosto (seção 11).</li>
         </ul>
         <p class="destaque"><strong>Um erro de rótulo que aconteceu de verdade.</strong> Para testar um objeto não humano,
           treinamos também a classe <code>bolotas</code> (um urso de pelúcia). Ao vivo, quando o Luiz chegava perto da câmera,
@@ -331,16 +313,12 @@
           <li><strong>Cada arquivo vira uma matriz de números.</strong> Uma foto colorida vira uma matriz
             altura × largura × 3: para cada pixel, os valores de vermelho, verde e azul (0 a 255).</li>
           <li><strong>Fotos “deitadas” são desviradas.</strong> Celulares às vezes salvam a foto deitada e anotam a rotação
-            certa nos metadados (EXIF). Nesse caso, giramos a matriz.
+            certa nos metadados (EXIF). A função <code>exif_transpose</code> do PIL lê essa anotação e desvira a foto.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="dados/ler_imagem"></pre>
               <ol class="notas">
-                <li data-trecho="img = Image.open(caminho)">Abre o arquivo. É o único uso do PIL: ler (e salvar) imagens.</li>
-                <li data-trecho="img.getexif().get(274, 1)">Lê a orientação anotada pela câmera (código 274 do EXIF; 1 = normal).</li>
-                <li data-trecho='np.array(img.convert("RGB"))'>Transforma a imagem em uma matriz NumPy (altura, largura, 3).</li>
-                <li data-trecho="if orientacao == 3">Foto de cabeça para baixo: gira 180°.</li>
-                <li data-trecho="if orientacao == 6">Foto deitada: gira 90° no sentido horário (o 8 é o anti-horário).</li>
+                <li data-trecho="ImageOps.exif_transpose(Image.open(caminho))">Abre o arquivo, desvira conforme o EXIF e transforma em uma matriz NumPy (altura, largura, 3).</li>
               </ol>
             </details>
           </li>
@@ -350,90 +328,67 @@
       <!-- 4. Pré-processamento -->
       <article id="preprocessamento" class="secao">
         <h2><span class="numero">4</span> Pré-processamento</h2>
-        <p class="resumo">Toda foto, de qualquer tamanho, vira uma imagem de 96×96 em tons de cinza, com valores entre 0 e 1,
+        <p class="resumo">Toda foto, de qualquer tamanho, vira uma imagem de 64×64 em tons de cinza, com valores entre 0 e 1,
           mostrando só o rosto: o formato que a rede espera.</p>
         <p>A <strong>mesma</strong> função é usada no treino e no reconhecimento ao vivo: se fossem diferentes, a rede veria
-          ao vivo imagens diferentes das que aprendeu. São 6 etapas, cada uma uma função curta feita com NumPy.</p>
-        <p class="destaque"><strong>Por que tirar o fundo?</strong> Na primeira versão, o recorte pegava o quarto inteiro e
-          o rosto ocupava uma parte pequena da imagem. Cada integrante tinha sido fotografado em um cenário próprio, então
-          a rede aprendeu a reconhecer o <em>cenário</em>: com o rosto de uma pessoa colado no cenário de outra, ela
-          respondia o dono do cenário em 92% das vezes, e com a cadeira vazia respondia o nome de quem costuma sentar ali.
-          As etapas 1 e 5 deixam o fundo quase todo de fora (veja o teste de troca de fundo na seção 10).</p>
+          ao vivo imagens diferentes das que aprendeu. As etapas usam funções prontas do OpenCV, que são rápidas e testadas;
+          a parte feita à mão do trabalho é a CNN.</p>
+        <p class="destaque"><strong>Por que achar o rosto?</strong> Na primeira versão, o recorte era um quadrado fixo no meio
+          da foto e cada integrante tinha sido fotografado em um cenário próprio. A rede aprendeu o <em>cenário</em>: com o
+          rosto de uma pessoa colado no cenário de outra, respondia o dono do cenário em 92% das vezes. Com o detector, o
+          recorte é justo no rosto, onde quer que ele esteja, e o cenário quase não aparece.</p>
         <figure class="figura">
-          <img data-resultado="preprocessamento" alt="As etapas do pré-processamento e o histograma antes e depois da equalização">
-          <figcaption>As etapas para a primeira foto de cada integrante. À direita, o histograma dos tons antes e depois da
-            equalização: depois dela, os tons ocupam toda a faixa.</figcaption>
+          <img data-resultado="preprocessamento" alt="As etapas do pré-processamento e o histograma antes e depois do CLAHE">
+          <figcaption>As etapas para a primeira foto de cada integrante. À direita, o histograma dos tons antes e depois do
+            CLAHE: depois dele, os tons ocupam toda a faixa.</figcaption>
         </figure>
         <ol class="passos">
-          <li><strong>Recorte do rosto.</strong> Cortamos um quadrado com 60% do menor lado da foto, centralizado na
-            horizontal e com o centro a 45% da altura, onde o rosto fica quando a pessoa está no oval. Uma foto de 640×480
-            vira 288×288. <em>Por quê:</em> a rede exige entrada quadrada, cortar não deforma o rosto (redimensionar direto o
-            achataria) e um quadrado mais fechado deixa de fora a maior parte do fundo. Sem detector de rosto, a posição é
-            fixa: é a mesma caixa desenhada no reconhecimento ao vivo.
+          <li><strong>Tons de cinza.</strong> Cada pixel vira um único número, uma média ponderada das cores
+            (<code>0,299·R + 0,587·G + 0,114·B</code>), com <code>cv2.cvtColor</code>. <em>Por quê:</em> a identidade está na
+            forma do rosto, não na cor; com 1 canal em vez de 3, a rede fica menor e depende menos da iluminação.</li>
+          <li><strong>Achar o rosto.</strong> O detector Haar do OpenCV (Viola-Jones) procura padrões de claro e escuro típicos
+            de um rosto (olhos mais escuros que a testa, nariz mais claro que as laterais) em janelas de vários tamanhos. Ele
+            devolve um quadrado para cada rosto. Não é uma rede neural e não sabe de quem é o rosto. Se não acha nenhum, a foto
+            fica de fora do treino (e, ao vivo, a resposta é “ninguém”).
             <details class="no-codigo">
               <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="preprocessamento/caixa_do_rosto"></pre>
+              <pre class="codigo" data-codigo="preprocessamento/detectar_rostos"></pre>
               <ol class="notas">
-                <li data-trecho="lado = max(1, int(min(altura, largura) * fracao))">O lado do quadrado: 60% do menor lado (o padrão de <code>fracao</code>) (0,6 × 480 = 288 em uma foto 640×480).</li>
-                <li data-trecho="topo = int(np.clip(altura * ALTURA_ROSTO - lado / 2">O topo deixa o centro do quadrado a 45% da altura: 0,45 × 480 − 144 = 72. O <code>clip</code> impede que o quadrado saia da foto.</li>
-                <li data-trecho="esquerda = (largura - lado) // 2">Centralizado na horizontal: (640 − 288) / 2 = 176.</li>
-              </ol>
-            </details>
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="preprocessamento/recorte_rosto"></pre>
-              <ol class="notas">
-                <li data-trecho="topo, esquerda, lado = caixa_do_rosto(">Calcula onde fica o quadrado do rosto nesta foto.</li>
-                <li data-trecho="return img[topo:topo + lado">Recorta a matriz: linhas de topo até topo+lado, colunas de esquerda até esquerda+lado.</li>
+                <li data-trecho="escala = min(1.0, 640 / max(cinza.shape))">Fotos de celular têm 4000 px: o detector roda numa cópia de no máximo 640 px, bem mais rápido.</li>
+                <li data-trecho="lado_minimo = max(24, int(0.1 * min(menor.shape)))">Ignora “rostos” muito pequenos (menos de 10% da foto), que costumam ser falsos.</li>
+                <li data-trecho="rostos = DETECTOR.detectMultiScale(">O detector: <code>scaleFactor=1.1</code> testa janelas 10% maiores a cada passada; <code>minNeighbors=5</code> exige 5 detecções vizinhas para aceitar um rosto.</li>
+                <li data-trecho="caixas = [tuple(int(v / escala)">Volta as caixas para o tamanho da foto original.</li>
+                <li data-trecho="return sorted(caixas, key=lambda caixa: -caixa[2])">Ordena do maior rosto para o menor (no treino, usamos o maior).</li>
               </ol>
             </details>
           </li>
-          <li><strong>Tons de cinza.</strong> Cada pixel vira um único número, uma média ponderada das cores:
-            <code>0,299·R + 0,587·G + 0,114·B</code> (o olho humano é mais sensível ao verde). <em>Por quê:</em> a identidade
-            está na forma do rosto, não na cor; com 1 canal em vez de 3, a rede fica menor e depende menos da iluminação.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="preprocessamento/para_cinza"></pre>
-              <ol class="notas">
-                <li data-trecho="return 0.299 * img[:, :, 0]">Multiplica o canal R (índice 0), G (1) e B (2) pelos pesos e soma, para todos os pixels de uma vez.</li>
-              </ol>
-            </details>
-          </li>
-          <li><strong>Redimensionamento para 96×96.</strong> Primeiro fazemos a <em>média de blocos</em>: em um recorte de
-            288×288, cada bloco de 3×3 pixels vira 1 pixel com a média deles. Depois, o <em>vizinho mais próximo</em> garante
-            o tamanho exato quando a conta não é inteira. <em>Por quê:</em> menos pixels deixam o treino rápido, e a média
-            evita o serrilhado de pegar só 1 pixel a cada 3.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="preprocessamento/redimensionar"></pre>
-              <ol class="notas">
-                <li data-trecho="fator = img.shape[0] // tamanho">Quantos pixels originais cabem em 1 pixel novo: 288 // 96 = 3.</li>
-                <li data-trecho="img = img[:n * fator, :n * fator]">Descarta as sobras da borda para a divisão em blocos ficar exata.</li>
-                <li data-trecho="img.reshape(n, fator, n, fator).mean(axis=(1, 3))">Separa a imagem em blocos 3×3 (eixos 1 e 3) e tira a média de cada bloco.</li>
-                <li data-trecho="indices = (np.arange(tamanho)">Para cada pixel novo, calcula qual pixel da imagem anterior corresponde a ele.</li>
-                <li data-trecho="return img[indices][:, indices]">Pega esses pixels (linhas e colunas): o resultado tem exatamente 96×96.</li>
-              </ol>
-            </details>
-          </li>
-          <li><strong>Equalização de histograma.</strong> Contamos quantos pixels há de cada tom (o histograma), acumulamos
-            essa contagem e usamos o acumulado para espalhar os tons por toda a faixa de 0 a 255. <em>Por quê:</em> uma foto
-            escura e uma clara da mesma pessoa ficam parecidas.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="preprocessamento/equalizar_histograma"></pre>
-              <ol class="notas">
-                <li data-trecho="img = img.astype(np.uint8)">Converte para números inteiros de 0 a 255 (cada tom é um inteiro).</li>
-                <li data-trecho="np.bincount(img.ravel(), minlength=256)">O histograma: quantos pixels existem de cada tom, de 0 a 255.</li>
-                <li data-trecho="acumulado = histograma.cumsum()">Soma acumulada: quantos pixels têm tom menor ou igual a cada valor.</li>
-                <li data-trecho="acumulado = (acumulado - acumulado.min())">Reescala o acumulado para 0–255. O <code>max(..., 1)</code> evita dividir por zero em uma imagem de uma cor só.</li>
-                <li data-trecho="return acumulado[img]">Troca cada pixel pelo valor acumulado do seu tom.</li>
-              </ol>
-            </details>
-          </li>
+          <li><strong>Recortar o rosto e reduzir para 64×64.</strong> Recortamos o quadrado do detector com 10% de margem de
+            cada lado (pega a testa e o queixo inteiros) e reduzimos com <code>INTER_AREA</code>, que faz a média dos pixels
+            de cada região em vez de pegar um só. <em>Por quê:</em> menos pixels deixam o treino rápido, e a média evita o
+            serrilhado.</li>
+          <li><strong>CLAHE (contraste local).</strong> A equalização de histograma comum espalha os tons da imagem inteira de
+            uma vez: se metade do rosto está na sombra, ela continua escura. O CLAHE divide o rosto em 4×4 blocos e equaliza
+            cada um separado, com um limite de contraste (2,0) para não exagerar o ruído. <em>Por quê:</em> a mesma pessoa
+            com luz da janela de um lado, ou com a luz do teto, fica parecida.</li>
+          <li><strong>Suavização leve.</strong> Um filtro gaussiano 3×3 tira o “chuvisco” da câmera, que o CLAHE realça. Ele vem
+            <em>depois</em> do CLAHE justamente por isso.
+            <p><strong>As correções valem a pena?</strong> Medimos treinando a mesma CNN com cada variante, num dataset
+              público de rostos (LFW: 7 pessoas, 737 fotos), com 2 sementes diferentes e até 60 épocas (média das duas):</p>
+            <div class="tabela-rolagem"><table>
+              <thead><tr><th>Tratamento</th><th>Acurácia no teste</th><th>Acurácia na validação</th></tr></thead>
+              <tbody>
+                <tr><td>nenhum (só recorte e máscara)</td><td>84,5%</td><td>86,2%</td></tr>
+                <tr><td>equalização global + suavização</td><td>88,2%</td><td>89,2%</td></tr>
+                <tr><td>só CLAHE</td><td>90,9%</td><td>89,7%</td></tr>
+                <tr><td><strong>CLAHE + suavização (o que usamos)</strong></td><td><strong>90,5%</strong></td><td><strong>93,1%</strong></td></tr>
+              </tbody>
+            </table></div>
+            <p>Corrigir o contraste ganha cerca de 6 pontos. Escolhemos pela <strong>validação</strong> (o teste não pode ser
+              usado para escolher nada, senão deixa de ser uma prova imparcial). Entre as variantes com correção, a diferença no
+              teste é de poucas fotos (cada foto vale 0,9 ponto), dentro do acaso.</p></li>
           <li><strong>Máscara oval.</strong> Mantemos um oval do formato de um rosto (80% da largura e 96% da altura da
-            imagem) e trocamos o resto por um cinza neutro, com uma transição suave na borda. <em>Por quê:</em> os cantos
-            do recorte ainda mostram parede, estante ou cama; com a máscara, a rede quase não vê o ambiente e precisa
-            aprender pelo rosto. É o mesmo oval desenhado na tela no reconhecimento ao vivo.
+            imagem) e trocamos os cantos por um cinza neutro, com uma transição suave na borda. <em>Por quê:</em> os cantos
+            do recorte ainda mostram um pouco de cabelo, orelha e fundo; com a máscara, a rede precisa aprender pelo rosto.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="preprocessamento/mascara_oval"></pre>
@@ -447,21 +402,35 @@
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="preprocessamento/aplicar_mascara_oval"></pre>
               <ol class="notas">
-                <li data-trecho="m = mascara_oval(img.shape[0], escala)">Os pesos de cada pixel.</li>
+                <li data-trecho="m = mascara_oval(img.shape[0])">Os pesos de cada pixel.</li>
                 <li data-trecho="return img * m + cinza * (1 - m)">Mistura: o rosto onde o peso é 1, o cinza 127,5 onde é 0 e uma mistura dos dois na borda.</li>
               </ol>
             </details>
           </li>
-          <li><strong>Escala de 0 a 1.</strong> Dividimos tudo por 255 e deixamos a matriz no formato (96, 96, 1): altura,
+          <li><strong>Escala de 0 a 1.</strong> Dividimos tudo por 255 e deixamos a matriz no formato (64, 64, 1): altura,
             largura e 1 canal. <em>Por quê:</em> redes neurais treinam melhor com números pequenos.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="preprocessamento/tratar_rosto"></pre>
+              <ol class="notas">
+                <li data-trecho="m = int(MARGEM_ROSTO * lado)">A margem: 10% do lado do quadrado do detector.</li>
+                <li data-trecho="e1 = cinza[max(0, y - m)">Etapa 3: recorta o rosto com a margem (sem sair da foto).</li>
+                <li data-trecho="e2 = cv2.resize(e1, (IMG_SIZE, IMG_SIZE)">Etapa 3: reduz para 64×64 pela média da área.</li>
+                <li data-trecho="e3 = CLAHE.apply(e2)">Etapa 4: CLAHE (o objeto <code>CLAHE</code> é criado uma vez só, no topo do arquivo).</li>
+                <li data-trecho="e4 = cv2.GaussianBlur(e3, (3, 3), 0)">Etapa 5: suavização gaussiana 3×3.</li>
+                <li data-trecho="e5 = aplicar_mascara_oval(">Etapa 6: máscara oval.</li>
+                <li data-trecho="final = (e5 / 255.0).reshape(">Etapa 7: valores entre 0 e 1, no formato (64, 64, 1) em <code>float32</code>.</li>
+                <li data-trecho="if mostrar_etapas:">Se pedido, devolve também as imagens intermediárias (usadas nas figuras e no botão “Ver o que a rede vê”).</li>
+              </ol>
+            </details>
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="preprocessamento/preprocessar"></pre>
               <ol class="notas">
-                <li data-trecho="e1 = recorte_rosto(img, fracao)">As etapas 1 a 5 em sequência: a saída de uma é a entrada da próxima.</li>
-                <li data-trecho="e6 = e5 / 255.0">Etapa 6: valores entre 0 e 1.</li>
-                <li data-trecho="final = e6.reshape(IMG_SIZE, IMG_SIZE, 1)">Formato (96, 96, 1) em <code>float32</code>, que é o que a CNN espera.</li>
-                <li data-trecho="if mostrar_etapas:">Se pedido, devolve também as imagens intermediárias (usadas nas figuras e no botão “Ver o que a rede vê”).</li>
+                <li data-trecho="cinza = cv2.cvtColor(">Etapa 1: tons de cinza.</li>
+                <li data-trecho="rostos = detectar_rostos(cinza)">Etapa 2: acha os rostos.</li>
+                <li data-trecho="if not rostos:">Sem rosto, devolve <code>None</code>: a foto fica de fora do treino.</li>
+                <li data-trecho="return tratar_rosto(cinza, rostos[0])">Etapas 3 a 7 no maior rosto da foto.</li>
               </ol>
             </details>
           </li>
@@ -510,42 +479,8 @@
             </details>
           </li>
         </ol>
-        <h3>A classe “ninguém”</h3>
-        <p>O softmax sempre distribui 100% entre as classes que conhece. Se só existirem os integrantes, a rede é obrigada a
-          escolher um deles até para uma cadeira vazia. Por isso existe uma classe extra, <code>ninguem</code>, com exemplos
-          de fundo sem pessoa:</p>
-        <ol class="passos">
-          <li><strong>Fotos de “ninguém” (opcional).</strong> Se existir a pasta <code>dataset/ninguem/</code> (coletada pelo
-            site com o nome <code>ninguem</code>, com a câmera apontada para o lugar vazio), ela entra como uma classe comum
-            e é dividida em blocos como as outras.</li>
-          <li><strong>Recortes de fundo (automáticos).</strong> De cada foto de integrante também sai um quadrado do lado da
-            caixa do rosto, à esquerda ou à direita, na metade de cima da foto: só fundo, sem a pessoa. Ele passa pelo mesmo
-            pré-processamento das fotos.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="ninguem/recorte_de_fundo"></pre>
-              <ol class="notas">
-                <li data-trecho="_, esquerda, _ = caixa_do_rosto(altura, largura)">Onde começa a caixa do rosto: tudo à esquerda dela (e o mesmo tanto à direita) é fundo.</li>
-                <li data-trecho="lado = max(1, min(esquerda, altura))">O quadrado de fundo cabe nesse espaço lateral, sem encostar na caixa do rosto.</li>
-                <li data-trecho="x = 0 if gerador.random() < 0.5">Sorteia o lado: canto esquerdo ou direito.</li>
-                <li data-trecho="y = int(gerador.integers(0, (altura - lado) // 2 + 1))">Sorteia a altura na metade de cima (embaixo costumam aparecer os ombros).</li>
-              </ol>
-            </details>
-          </li>
-          <li><strong>Cada conjunto com os seus fundos.</strong> Depois da divisão, treino, validação e teste recebem recortes
-            de fundo das <strong>suas próprias</strong> fotos, nunca de outro conjunto. A quantidade é a média de fotos por
-            integrante, para a classe nova não dominar o treino.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="ninguem/adicionar_ninguem"></pre>
-              <ol class="notas">
-                <li data-trecho="quantidade = int(round(np.mean(np.delete(">Quantos exemplos entram: a média de fotos dos integrantes neste conjunto.</li>
-                <li data-trecho="escolhidos = gerador.choice(">Sorteia quais recortes de fundo usar, sem repetir.</li>
-                <li data-trecho="y_novo = np.concatenate([y, np.full(">Todos recebem o rótulo de “ninguém”.</li>
-              </ol>
-            </details>
-          </li>
-        </ol>
+        <p>Antes da divisão, as fotos em que o detector não achou rosto já saíram (seção 4). O log do treino mostra quantas
+          foram descartadas por integrante.</p>
 
         <h3>Quantas fotos ficaram em cada conjunto</h3>
         <div class="tabela-rolagem dinamico" id="tabela-divisao"></div>
@@ -554,73 +489,40 @@
       <!-- 6. Aumento de dados -->
       <article id="aumento" class="secao">
         <h2><span class="numero">6</span> Aumento de dados</h2>
-        <p class="resumo">Para a rede não decorar as fotos de treino, criamos versões levemente modificadas de cada uma,
-          simulando situações reais.</p>
+        <p class="resumo">Para a rede não decorar as fotos de treino, cada foto é modificada de leve, ao acaso, toda vez
+          que a rede a vê.</p>
         <p>Com poucas fotos, a rede tende a <strong>decorar</strong> as imagens de treino (overfitting) em vez de aprender o
-          rosto. Cada foto de treino ganha 3 cópias modificadas. Primeiro, cada cópia pode mudar de <strong>cena</strong>:</p>
+          rosto. O aumento é feito <strong>dentro do laço de treino</strong>, a cada lote: em cada época, cada foto vira uma
+          cópia nova, com valores sorteados de novo. Ao longo de 150 épocas, a rede vê até 150 versões diferentes de cada foto, sem
+          ocupar memória com cópias guardadas.</p>
         <ol class="passos">
-          <li><strong>Outra distância (50% de chance):</strong> na leitura, cada foto também é recortada com um quadrado
-            sorteado entre 45% e 90% do menor lado, em vez de 60%. Com o quadrado maior, o rosto fica menor dentro do oval
-            e aparece mais cena em volta, como se a pessoa estivesse mais longe da câmera; com o menor, como se estivesse
-            mais perto.</li>
-          <li><strong>Troca de entorno (50% de chance, só para integrantes):</strong> o anel em volta do rosto é trocado
-            pelo de uma foto de <strong>outra classe</strong>, e o rótulo continua sendo o dono do rosto. <em>Por quê:</em>
-            na versão anterior, cada integrante tinha um cenário próprio e a rede aprendeu o cenário: uma integrante era
-            reconhecida mesmo com o rosto apagado, e quem se afastava da câmera no cenário dela era confundido com ela.
-            Com o entorno sorteado, o cenário deixa de indicar quem é a pessoa.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="aumento/variar_cena"></pre>
-              <ol class="notas">
-                <li data-trecho="img = X_distancia[i] if np.random.rand() < 0.5 else X[i]">Metade das vezes, parte da versão “de outra distância” da foto.</li>
-                <li data-trecho="if y[i] != indice_ninguem and np.random.rand() < 0.5:">Metade das vezes (e só se a foto for de um integrante)...</li>
-                <li data-trecho="outra = np.random.choice(np.where(y != y[i])[0])">...sorteia uma foto de qualquer outra classe...</li>
-                <li data-trecho="img = trocar_fundo(img, X[outra])">...e junta o rosto desta foto com o entorno da outra (a mesma função do teste da seção 10).</li>
-              </ol>
-            </details>
-          </li>
-        </ol>
-        <p>Depois, cada cópia passa por estes passos, com valores sorteados:</p>
-        <ol class="passos">
+          <li><strong>Girar, ampliar e deslocar</strong> numa única transformação (<code>cv2.warpAffine</code>): rotação de
+            até ±10°, zoom de 90% a 110% e deslocamento de até 4 pixels. Simula a cabeça inclinada, a pessoa mais perto ou mais
+            longe e o detector enquadrando um pouco diferente.</li>
           <li><strong>Espelhar (50% de chance):</strong> simula o rosto virado para o outro lado.</li>
-          <li><strong>Deslocar até 8 pixels</strong> em qualquer direção: simula o rosto fora do centro. A borda que aparece é
-            preenchida repetindo os pixels da beirada.</li>
-          <li><strong>Esconder mais fundo:</strong> aplica de novo a máscara oval, encolhida até 25%. Cada cópia mostra uma
-            quantidade diferente do fundo em volta do rosto, então o fundo deixa de ser uma pista confiável.</li>
           <li><strong>Mudar contraste e brilho:</strong> o contraste é multiplicado por um valor entre 0,8 e 1,2 e o brilho
             muda até ±0,1. Simula iluminações diferentes.</li>
           <li><strong>Somar um ruído pequeno</strong> a cada pixel: simula uma câmera de qualidade pior.</li>
-          <li><strong>Manter os valores entre 0 e 1.</strong>
+          <li><strong>Aplicar a máscara oval de novo,</strong> para os cantos voltarem a ser o mesmo cinza das fotos reais
+            depois de girar e mudar o brilho.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="aumento/aumentar"></pre>
               <ol class="notas">
-                <li data-trecho="if np.random.rand() < 0.5:">Passo 1: sorteia um número entre 0 e 1; metade das vezes espelha.</li>
-                <li data-trecho="img = img[:, ::-1]">Espelhar é inverter a ordem das colunas da matriz.</li>
-                <li data-trecho="dy, dx = np.random.randint(-8, 9, size=2)">Passo 2: sorteia o deslocamento vertical e horizontal, de −8 a 8 pixels.</li>
-                <li data-trecho="com_borda = np.pad(">Aumenta a imagem com 8 pixels de borda repetindo a beirada (<code>mode="edge"</code>)...</li>
-                <li data-trecho="img = com_borda[8 + dy">...e recorta 96×96 numa posição deslocada.</li>
-                <li data-trecho="img = aplicar_mascara_oval(img[:, :, 0], escala=np.random.uniform(0.75, 1.0)">Passo 3: a máscara oval com um tamanho sorteado entre 75% e 100%; o cinza (0,5) avança sobre a borda.</li>
-                <li data-trecho="img = (img - 0.5) * np.random.uniform(0.8, 1.2)">Passo 4: afasta ou aproxima cada pixel do cinza médio (contraste) e soma um valor (brilho).</li>
-                <li data-trecho="np.random.normal(0, 0.02, img.shape)">Passo 5: ruído com média 0 e desvio 0,02, diferente para cada pixel.</li>
-                <li data-trecho="return np.clip(img, 0, 1)">Passo 6: corta o que passou de 1 ou ficou abaixo de 0.</li>
+                <li data-trecho="matriz = cv2.getRotationMatrix2D(">Passo 1: a matriz da transformação, com o ângulo e o zoom sorteados, em torno do centro da imagem.</li>
+                <li data-trecho="matriz[:, 2] += gerador.uniform(-4, 4, size=2)">Passo 1: soma o deslocamento sorteado (horizontal e vertical).</li>
+                <li data-trecho="img = cv2.warpAffine(">Passo 1: aplica a transformação; a borda que aparece é preenchida refletindo a imagem.</li>
+                <li data-trecho="if gerador.random() < 0.5:">Passo 2: sorteia um número entre 0 e 1; metade das vezes espelha...</li>
+                <li data-trecho="img = img[:, ::-1]">...invertendo a ordem das colunas da matriz.</li>
+                <li data-trecho="img = (img - 0.5) * gerador.uniform(0.8, 1.2)">Passo 3: afasta ou aproxima cada pixel do cinza médio (contraste) e soma um valor (brilho).</li>
+                <li data-trecho="img = img + gerador.normal(0, 0.02, img.shape)">Passo 4: ruído com média 0 e desvio 0,02, diferente para cada pixel.</li>
+                <li data-trecho="img = aplicar_mascara_oval(np.clip(img, 0, 1), cinza=0.5)">Passo 5: corta os valores para 0–1 e aplica a máscara oval (cinza 0,5).</li>
               </ol>
             </details>
           </li>
         </ol>
         <p>O aumento é aplicado <strong>apenas no treino</strong>. Validação e teste usam as fotos reais, porque precisam medir
-          o desempenho em situações verdadeiras. No fim, o treino tem 4 vezes mais imagens: as originais e 3 cópias.</p>
-        <details class="no-codigo">
-          <summary>Ver no código</summary>
-          <pre class="codigo" data-codigo="aumento/montar_treino_aumentado"></pre>
-          <ol class="notas">
-            <li data-trecho="X_final = [X_treino]">Começa com as fotos originais de treino.</li>
-            <li data-trecho="for _ in range(COPIAS_AUMENTADAS)">Repete 3 vezes: uma cópia modificada de cada foto por vez.</li>
-            <li data-trecho="X_final.append(np.array([aumentar(variar_cena(">Cada cópia: primeiro muda a cena (distância e entorno), depois passa pelo <code>aumentar</code>.</li>
-            <li data-trecho="y_final.append(y_treino)">O rótulo não muda: a foto modificada continua sendo da mesma pessoa.</li>
-            <li data-trecho="return np.concatenate(X_final)">Junta tudo em uma única matriz de treino.</li>
-          </ol>
-        </details>
+          o desempenho em situações verdadeiras.</p>
         <figure class="figura">
           <img data-resultado="aumento" alt="Uma foto de treino de cada integrante e seis versões aumentadas">
           <figcaption>A mesma foto de treino modificada 6 vezes pelo aumento de dados.</figcaption>
@@ -632,56 +534,102 @@
         <h2><span class="numero">7</span> Arquitetura da CNN</h2>
         <p class="resumo">A rede olha a imagem em camadas: as primeiras encontram bordas, as seguintes juntam bordas em partes
           do rosto, e as últimas decidem de quem é o rosto.</p>
-        <div class="diagrama" role="img" aria-label="Fluxo da CNN: 96×96 para 48, 24, 12, 6, vetor de 4608 valores e probabilidades">
-          <div class="no"><div class="quadro" style="--lado: 112px">96×96×1</div><span>entrada</span></div>
+        <p>Toda a rede está em <code>src/modelo.py</code>, escrita por nós com NumPy. Cada camada tem duas funções: a
+          <strong>ida</strong> (forward), que calcula a saída, e a <strong>volta</strong> (backward), que calcula os
+          gradientes pela regra da cadeia. Os pesos ficam num dicionário (<code>W1</code>, <code>b1</code>, ...,
+          <code>W5</code>, <code>b5</code>), salvo em <code>modelo/modelo_cnn.npz</code>.</p>
+        <div class="diagrama" role="img" aria-label="Fluxo da CNN: 64×64 para 32, 16, 8, vetor de 2048 valores e probabilidades">
+          <div class="no"><div class="quadro" style="--lado: 104px">64×64×1</div><span>entrada</span></div>
           <div class="seta">→</div>
-          <div class="no"><div class="quadro" style="--lado: 84px">48×48×32</div><span>conv1 + pool1</span></div>
+          <div class="no"><div class="quadro" style="--lado: 80px">32×32×8</div><span>conv1 + pool1</span></div>
           <div class="seta">→</div>
-          <div class="no"><div class="quadro" style="--lado: 64px">24×24<br>×64</div><span>conv2 + pool2</span></div>
+          <div class="no"><div class="quadro" style="--lado: 60px">16×16<br>×16</div><span>conv2 + pool2</span></div>
           <div class="seta">→</div>
-          <div class="no"><div class="quadro" style="--lado: 50px">12×12<br>×128</div><span>conv3 + pool3</span></div>
+          <div class="no"><div class="quadro" style="--lado: 46px">8×8<br>×32</div><span>conv3 + pool3</span></div>
           <div class="seta">→</div>
-          <div class="no"><div class="quadro" style="--lado: 40px">6×6<br>×128</div><span>conv4 + pool4</span></div>
+          <div class="no"><div class="vetor">2048</div><span>flatten + dropout</span></div>
           <div class="seta">→</div>
-          <div class="no"><div class="vetor">4608</div><span>flatten + dropout</span></div>
-          <div class="seta">→</div>
-          <div class="no"><div class="vetor curto">128</div><span>densa (ReLU)</span></div>
+          <div class="no"><div class="vetor curto">64</div><span>densa (ReLU)</span></div>
           <div class="seta">→</div>
           <div class="no"><div class="vetor saida">%</div><span>pontuações → softmax</span></div>
         </div>
 
         <h3>O que acontece com a foto dentro da rede</h3>
         <ol class="passos">
+          <li><strong>Começar com pesos aleatórios.</strong> Cada filtro e cada neurônio começa com valores sorteados pela
+            inicialização de He (desvio <code>√(2 / entradas)</code>), pensada para a ReLU: assim o sinal não some nem explode ao
+            atravessar as camadas.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/iniciar_pesos"></pre>
+              <ol class="notas">
+                <li data-trecho='formas = {f"W{i + 1}": (3, 3, canais[i], canais[i + 1])'>Os 3 filtros de convolução: 3×3, de 1→8, 8→16 e 16→32 canais.</li>
+                <li data-trecho='formas["W4"] = ((tamanho // 8) ** 2 * FILTROS[-1], DENSA)'>A densa: 3 poolings levam 64 a 8, então entram 8·8·32 = 2048 valores.</li>
+                <li data-trecho="entradas = int(np.prod(forma[:-1]))">Quantos valores entram em cada neurônio (para um filtro: 3·3·canais).</li>
+                <li data-trecho="params[nome] = gerador.normal(0, np.sqrt(2 / entradas), forma)">Sorteia os pesos com a inicialização de He.</li>
+                <li data-trecho='params["b" + nome[1:]] = np.zeros('>Os vieses (bias) começam em zero.</li>
+              </ol>
+            </details>
+          </li>
           <li><strong>Convolução 3×3 + ReLU.</strong> Pequenos filtros de 3×3 deslizam pela imagem e respondem quando
             encontram o padrão que procuram (uma borda, uma curva...). Cada filtro gera um “mapa” de onde encontrou o padrão.
-            Os valores dos filtros não são escritos por nós: eles são aprendidos no treino. A ReLU (<code>max(0, x)</code>)
-            zera os valores negativos, o que permite à rede aprender relações não lineares.</li>
-          <li><strong>MaxPooling 2×2.</strong> Cada janela 2×2 vira o seu maior valor: a imagem cai pela metade (96 → 48) e a
-            rede passa a tolerar pequenos deslocamentos.</li>
-          <li><strong>Repetir 4 vezes, com cada vez mais filtros</strong> (32, 64, 128, 128). A imagem fica menor (até 6×6) e
-            mais “profunda”: as camadas finais combinam os padrões das anteriores em partes do rosto.</li>
-          <li><strong>Flatten.</strong> Os 128 mapas de 6×6 viram uma única lista de 4608 números.</li>
-          <li><strong>Dropout 50%.</strong> Durante o treino, metade desses números é desligada ao acaso, para a rede não
-            depender de poucos neurônios (combate o overfitting).</li>
-          <li><strong>Camada densa (128 neurônios).</strong> Combina todas as características encontradas.</li>
+            A ReLU (<code>max(0, x)</code>) zera os valores negativos, o que permite à rede aprender relações não lineares.
+            <em>Como fazemos rápido:</em> em vez de 4 laços <code>for</code> (pixel, linha, canal, filtro), juntamos todas as
+            janelas 3×3 da imagem numa matriz (o “im2col”) e fazemos <strong>uma</strong> multiplicação de matrizes
+            (<code>np.tensordot</code>), que o NumPy executa em código otimizado.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/janelas_3x3"></pre>
+              <ol class="notas">
+                <li data-trecho="return sliding_window_view(np.pad(">Põe 1 pixel de borda de zeros (para a saída ter o mesmo tamanho) e monta, sem copiar, todas as janelas 3×3.</li>
+              </ol>
+            </details>
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/conv_forward"></pre>
+              <ol class="notas">
+                <li data-trecho="return np.tensordot(janelas_3x3(x), W">Multiplica cada janela (3×3×canais) pelos pesos de cada filtro e soma: é a convolução. Depois soma o viés.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Max pooling 2×2.</strong> Cada bloco 2×2 vira o seu maior valor: a imagem cai pela metade (64 → 32) e a
+            rede passa a tolerar pequenos deslocamentos.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/pool_forward"></pre>
+              <ol class="notas">
+                <li data-trecho="return x.reshape(n, altura // 2, 2, largura // 2, 2, canais).max(axis=(2, 4))">Separa a imagem em blocos 2×2 (eixos 2 e 4) e fica com o máximo de cada um.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Repetir 3 vezes, com cada vez mais filtros</strong> (8, 16, 32). A imagem fica menor (até 8×8) e mais
+            “profunda”: as camadas finais combinam os padrões das anteriores em partes do rosto.</li>
+          <li><strong>Flatten e dropout 50%.</strong> Os 32 mapas de 8×8 viram uma lista de 2048 números. Durante o treino,
+            metade deles é desligada ao acaso (e o resto é multiplicado por 2, para a soma não mudar), para a rede não depender
+            de poucos neurônios.</li>
+          <li><strong>Camada densa (64 neurônios) + ReLU.</strong> Cada neurônio olha os 2048 números e combina as
+            características encontradas: é uma multiplicação de matrizes (<code>@</code>).</li>
           <li><strong>Pontuações e softmax.</strong> Uma pontuação por integrante; o softmax transforma as pontuações em
             probabilidades que somam 1 (ex.: ana 92%, bruno 5%, carla 3%).
             <details class="no-codigo">
               <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="modelo/construir_cnn"></pre>
+              <pre class="codigo" data-codigo="modelo/propagar"></pre>
               <ol class="notas">
-                <li data-trecho="keras.Input(shape=(IMG_SIZE, IMG_SIZE, 1)">A entrada: uma imagem 96×96 com 1 canal (cinza).</li>
-                <li data-trecho='layers.Conv2D(32, 3, padding="same"'>Passo 1: 32 filtros 3×3 com ReLU. <code>padding="same"</code> mantém o tamanho 96×96.</li>
-                <li data-trecho='layers.MaxPooling2D(2, name="pool1")'>Passo 2: pooling 2×2, de 96 para 48.</li>
-                <li data-trecho="layers.Conv2D(64, 3">Passo 3: o segundo bloco, com 64 filtros (de 48 para 24 no pooling).</li>
-                <li data-trecho='name="conv4"'>Passo 3: o quarto bloco; os mapas desta camada são usados no Grad-CAM.</li>
-                <li data-trecho='layers.Flatten(name="flatten")'>Passo 4: 6×6×128 vira um vetor de 4608 números.</li>
-                <li data-trecho="layers.Dropout(0.5">Passo 5: desliga 50% dos valores ao acaso (só durante o treino).</li>
-                <li data-trecho="layers.Dense(128">Passo 6: a camada densa com 128 neurônios e ReLU.</li>
-                <li data-trecho="layers.Dense(n_classes">Passo 7: uma pontuação por integrante (sem ativação).</li>
-                <li data-trecho="layers.Softmax(">Passo 7: o softmax transforma as pontuações em probabilidades.</li>
-                <li data-trecho="learning_rate=0.001">O otimizador Adam, que ajusta os pesos no treino (seção 8).</li>
-                <li data-trecho='loss="sparse_categorical_crossentropy"'>A medida de erro: entropia cruzada, com os rótulos como números 0, 1, 2...</li>
+                <li data-trecho='z = np.maximum(conv_forward(a, params[f"W{i}"], params[f"b{i}"]), 0)'>Passo 2: convolução + ReLU.</li>
+                <li data-trecho="s = pool_forward(z)">Passo 3: pooling.</li>
+                <li data-trecho="convs.append((a, z, s))">Guarda a entrada, os mapas e a saída de cada bloco: a volta (retropropagação) precisa deles.</li>
+                <li data-trecho="plano = a.reshape(len(a), -1)">Passo 5: flatten, 8×8×32 vira 2048.</li>
+                <li data-trecho="if gerador is not None:">Passo 5: dropout, só no treino (quando recebemos o sorteador).</li>
+                <li data-trecho='h = np.maximum(h_entrada @ params["W4"]'>Passo 6: a camada densa com ReLU.</li>
+                <li data-trecho='pontuacoes = h @ params["W5"]'>Passo 7: uma pontuação por integrante.</li>
+              </ol>
+            </details>
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/softmax"></pre>
+              <ol class="notas">
+                <li data-trecho="e = np.exp(pontuacoes - pontuacoes.max(">Exponencial de cada pontuação. Subtrair o máximo antes não muda o resultado e evita estourar o número.</li>
+                <li data-trecho="return e / e.sum(">Divide pela soma: as probabilidades somam 1.</li>
               </ol>
             </details>
           </li>
@@ -693,14 +641,16 @@
         <div class="tabela-rolagem"><table>
           <thead><tr><th>Camada</th><th>Fórmula</th><th>Parâmetros</th></tr></thead>
           <tbody>
-            <tr><td>conv1</td><td>3·3·1·32 + 32</td><td>320</td></tr>
-            <tr><td>conv2</td><td>3·3·32·64 + 64</td><td>18.496</td></tr>
-            <tr><td>conv3</td><td>3·3·64·128 + 128</td><td>73.856</td></tr>
-            <tr><td>conv4</td><td>3·3·128·128 + 128</td><td>147.584</td></tr>
-            <tr><td>densa</td><td>4608·128 + 128</td><td>589.952</td></tr>
-            <tr><td>pontuacoes</td><td>128·N + N (N = integrantes)</td><td>129·N</td></tr>
+            <tr><td>conv1</td><td>3·3·1·8 + 8</td><td>80</td></tr>
+            <tr><td>conv2</td><td>3·3·8·16 + 16</td><td>1.168</td></tr>
+            <tr><td>conv3</td><td>3·3·16·32 + 32</td><td>4.640</td></tr>
+            <tr><td>densa</td><td>2048·64 + 64</td><td>131.136</td></tr>
+            <tr><td>saída</td><td>64·N + N (N = integrantes)</td><td>65·N</td></tr>
           </tbody>
         </table></div>
+        <p>A rede é bem menor que a primeira versão (que tinha 830 mil parâmetros e entrada 96×96): como agora o detector
+          entrega só o rosto, já alinhado e corrigido, a rede não precisa de tanta capacidade, e o treino em NumPy fica em
+          segundos por época.</p>
         <h3>Camada a camada (modelo treinado)</h3>
         <div class="tabela-rolagem dinamico" id="tabela-camadas"></div>
       </article>
@@ -708,36 +658,104 @@
       <!-- 8. Treinamento -->
       <article id="treinamento" class="secao">
         <h2><span class="numero">8</span> Treinamento</h2>
-        <p class="resumo">A rede começa com pesos aleatórios e, foto após foto, ajusta esses pesos para errar cada vez menos.</p>
+        <p class="resumo">A rede começa com pesos aleatórios e, lote após lote, ajusta esses pesos para errar cada vez menos.
+          Todo esse laço é código nosso.</p>
         <ol class="passos">
-          <li><strong>Dividir o treino em lotes de 32 fotos.</strong> Uma passada completa por todas as fotos de treino é uma
-            <em>época</em>.</li>
-          <li><strong>Prever.</strong> Para cada foto do lote, a rede dá a probabilidade de cada integrante.</li>
+          <li><strong>Embaralhar e dividir o treino em lotes de 32 fotos.</strong> Uma passada completa por todas as fotos de
+            treino é uma <em>época</em>.</li>
+          <li><strong>Aumentar e prever.</strong> Cada foto do lote ganha uma versão modificada (seção 6) e passa pela rede
+            (ida), que dá a pontuação de cada integrante.</li>
           <li><strong>Medir o erro.</strong> A entropia cruzada: <code>erro = −log(probabilidade dada à pessoa certa)</code>.
-            Se a rede deu 0,9 para a pessoa certa, o erro é 0,1; se deu 0,1, o erro é 2,3.</li>
-          <li><strong>Ajustar os pesos.</strong> O <em>backpropagation</em> calcula quanto cada peso contribuiu para o erro, e
-            o otimizador Adam muda cada peso um pouco na direção que diminui o erro.</li>
-          <li><strong>Conferir na validação.</strong> No fim de cada época, a rede é testada nas fotos de validação (que ela não
-            usa para aprender).</li>
-          <li><strong>Parar na hora certa.</strong> São no máximo 60 épocas. Se o erro na validação não melhorar por 10 épocas
-            seguidas, o <em>EarlyStopping</em> para o treino e devolve os pesos da melhor época.
+            Se a rede deu 0,9 para a pessoa certa, o erro é 0,1; se deu 0,1, o erro é 2,3. O gradiente desse erro em relação às
+            pontuações é simples: <code>probabilidade − 1</code> na pessoa certa e <code>probabilidade</code> nas outras.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/softmax_entropia"></pre>
+              <ol class="notas">
+                <li data-trecho="p = softmax(pontuacoes)">As probabilidades de cada integrante.</li>
+                <li data-trecho="perda = -np.mean(np.log(p[linhas, y] + 1e-9))">O erro: −log da probabilidade da pessoa certa, na média do lote (o 1e-9 evita log(0)).</li>
+                <li data-trecho="p[linhas, y] -= 1">O gradiente: subtrai 1 na pessoa certa...</li>
+                <li data-trecho="return perda, p / len(y)">...e divide pelo tamanho do lote (porque o erro é uma média).</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Retropropagar (backpropagation).</strong> Pela regra da cadeia, o gradiente volta da saída para a
+            entrada, camada por camada. Em cada camada, ele responde “quanto o erro muda se este peso mudar um pouco”. A
+            ReLU só deixa passar o gradiente onde estava ativa; o pooling o manda só para o pixel que era o máximo; e a
+            convolução o espalha de volta pelas janelas com o filtro girado 180°.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/retropropagar"></pre>
+              <ol class="notas">
+                <li data-trecho='g = {"W5": cache["h"].T @ d_pontuacoes'>A última camada: gradiente dos pesos = entrada dela (transposta) × gradiente da saída.</li>
+                <li data-trecho='d_h = (d_pontuacoes @ params["W5"].T) * (cache["h"] > 0)'>Volta para a densa; a ReLU zera o gradiente onde o neurônio estava desligado.</li>
+                <li data-trecho='g["W4"], g["b4"] = cache["h_entrada"].T @ d_h'>Os gradientes da densa.</li>
+                <li data-trecho='d = ((d_h @ params["W4"].T) * cache["mascara"])'>Volta pelo dropout (mesma máscara da ida) e desfaz o flatten.</li>
+                <li data-trecho="for i in (3, 2, 1):">Os 3 blocos de convolução, do último para o primeiro.</li>
+                <li data-trecho="d_mapas = pool_backward(z, s, d)">Volta pelo pooling.</li>
+                <li data-trecho='if ate == f"conv{i}":'>Para o Grad-CAM (seção 10): para aqui e devolve o gradiente dos mapas desta camada.</li>
+                <li data-trecho='g[f"W{i}"], g[f"b{i}"], d = conv_backward('>Volta pela ReLU (<code>z &gt; 0</code>) e pela convolução: gradientes do filtro e da entrada.</li>
+              </ol>
+            </details>
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/conv_backward"></pre>
+              <ol class="notas">
+                <li data-trecho="dW = np.tensordot(janelas_3x3(x), d_saida">Gradiente do filtro: cada janela da entrada vezes o gradiente da saída naquela posição, somado em todas as posições e fotos.</li>
+                <li data-trecho="db = d_saida.sum(axis=(0, 1, 2))">Gradiente do viés: a soma do gradiente da saída.</li>
+                <li data-trecho="dx = np.tensordot(janelas_3x3(d_saida), W[::-1, ::-1]">Gradiente da entrada: a “convolução” do gradiente da saída com o filtro girado 180°.</li>
+              </ol>
+            </details>
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/pool_backward"></pre>
+              <ol class="notas">
+                <li data-trecho="ampliar = lambda a:">Repete cada valor num bloco 2×2 (o caminho inverso do pooling).</li>
+                <li data-trecho="return (x == ampliar(saida)) * ampliar(d_saida)">O gradiente vai só para o pixel que era o máximo do bloco; os outros não influenciaram a saída.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Ajustar os pesos (Adam).</strong> Cada peso anda um pouco contra o seu gradiente. O Adam guarda uma média
+            móvel do gradiente (a “inércia”, que suaviza o caminho) e uma do gradiente ao quadrado (que dá passos menores aos
+            pesos cujo gradiente oscila muito). Taxa de aprendizado: 0,001.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="modelo/passo_adam"></pre>
+              <ol class="notas">
+                <li data-trecho='t = estado["t"] = estado.get("t", 0) + 1'>Conta os passos dados (usado na correção do começo).</li>
+                <li data-trecho='m = estado[k + "_m"] ='>Média móvel do gradiente (90% da anterior + 10% do atual).</li>
+                <li data-trecho='v = estado[k + "_v"] ='>Média móvel do gradiente ao quadrado (99,9% da anterior).</li>
+                <li data-trecho="params[k] -= (taxa * (m / (1 - b1 ** t))">O passo: m dividido pela raiz de v. As divisões por <code>1 − b<sup>t</sup></code> corrigem as médias, que começam em zero.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Conferir na validação.</strong> No fim de cada época, a rede é testada nas fotos de validação (sem
+            aumento e sem dropout), que ela não usa para aprender.</li>
+          <li><strong>Parar na hora certa.</strong> São no máximo 150 épocas (no LFW, a melhor foi a 143: subir de 60 para 150 levou o teste de 90% para 94%). Se o erro na validação não melhorar por 10 épocas
+            seguidas, o treino para e a rede volta aos pesos da melhor época (<em>parada antecipada</em>).
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="treinar/treinar_rede"></pre>
               <ol class="notas">
-                <li data-trecho="keras.callbacks.EarlyStopping(">Passo 6: cria a “parada antecipada”.</li>
-                <li data-trecho='monitor="val_loss"'>Ela observa o erro na validação...</li>
-                <li data-trecho="patience=10">...tolera 10 épocas sem melhora...</li>
-                <li data-trecho="restore_best_weights=True">...e, no fim, volta para os pesos da melhor época.</li>
-                <li data-trecho="historico = model.fit(">Passos 1 a 5: o <code>fit</code> do Keras faz o laço de épocas e lotes, a previsão, o erro e o ajuste dos pesos.</li>
-                <li data-trecho="X_treino_final, y_treino_final,">As fotos de treino (com o aumento de dados) e seus rótulos.</li>
-                <li data-trecho="validation_data=(X_val, y_val)">Passo 5: as fotos de validação, conferidas no fim de cada época.</li>
-                <li data-trecho="batch_size=BATCH">Passo 1: lotes de 32 fotos.</li>
-                <li data-trecho="return {chave:">Devolve o erro e a acurácia de cada época (usados nas curvas abaixo).</li>
+                <li data-trecho="ordem = gerador.permutation(len(X_treino))">Passo 1: embaralha as fotos a cada época.</li>
+                <li data-trecho="for i in range(0, len(ordem), BATCH):">Passo 1: percorre as fotos em lotes de 32.</li>
+                <li data-trecho="x = np.array([aumentar(img, gerador) for img in X_treino[lote]])">Passo 2: uma cópia aumentada nova de cada foto do lote.</li>
+                <li data-trecho="pontuacoes, cache = propagar(params, x, gerador)">Passo 2: a ida, com o dropout ligado.</li>
+                <li data-trecho="erro, d_pontuacoes = softmax_entropia(">Passo 3: o erro e o seu gradiente.</li>
+                <li data-trecho="passo_adam(params, retropropagar(params, cache, d_pontuacoes), estado_adam)">Passos 4 e 5: retropropaga e ajusta os pesos.</li>
+                <li data-trecho="probs_val = prever(params, X_val)">Passo 6: as probabilidades na validação.</li>
+                <li data-trecho='print(f"Época {epoca}/{EPOCAS}'>Imprime uma linha por época (é ela que a barra de progresso do site lê).</li>
+                <li data-trecho='if historico["val_loss"][-1] < melhor_erro:'>Passo 7: se o erro na validação melhorou, guarda uma cópia dos pesos.</li>
+                <li data-trecho="if sem_melhora >= PACIENCIA:">Passo 7: 10 épocas sem melhora: para o treino.</li>
+                <li data-trecho="params.update(melhores)">Volta para os pesos da melhor época.</li>
               </ol>
             </details>
           </li>
         </ol>
+        <p class="destaque"><strong>Como sabemos que a retropropagação está certa?</strong> O teste
+          <code>tests/test_modelo.py</code> compara cada gradiente calculado com a <strong>derivada numérica</strong>: muda um
+          peso em ±0,00001, mede o erro e calcula <code>(erro(w + h) − erro(w − h)) / 2h</code>. Os dois valores precisam bater
+          em todas as camadas. O teste também confere que a rede consegue decorar um lote pequeno (o erro cai a quase zero).</p>
         <div class="numeros dinamico" id="info-treino"></div>
         <figure class="figura">
           <img data-resultado="curvas" alt="Curvas de erro e acurácia por época, no treino e na validação">
@@ -752,20 +770,17 @@
           <summary>Ver no código</summary>
           <pre class="codigo" data-codigo="treinar/main"></pre>
           <ol class="notas">
-            <li data-trecho="np.random.seed(SEED)">Fixa a semente 42: o treino dá o mesmo resultado a cada execução.</li>
+            <li data-trecho="gerador = np.random.default_rng(SEED)">Fixa a semente 42: o treino dá o mesmo resultado a cada execução.</li>
             <li data-trecho="classes, caminhos, rotulos = listar_dataset(">Etapa 1: leitura das pastas (seção 3).</li>
-            <li data-trecho="X.append(preprocessar(img))">Etapa 2: pré-processa todas as fotos (seção 4)...</li>
-            <li data-trecho="fundos.append(preprocessar(recorte_de_fundo(img, gerador)))">...e tira de cada uma um recorte de fundo para a classe “ninguém” (seção 5).</li>
+            <li data-trecho="rosto = preprocessar(ler_imagem(caminho))">Etapa 2: pré-processa todas as fotos (seção 4)...</li>
+            <li data-trecho="if rosto is not None:">...e só fica com as que têm rosto.</li>
             <li data-trecho="dividir_dados(y, classes)">Etapa 3: divisão em treino, validação e teste (seção 5).</li>
-            <li data-trecho="X_treino, y_treino = adicionar_ninguem(">Junta a cada conjunto os recortes de fundo das suas próprias fotos, com o rótulo “ninguém”.</li>
-            <li data-trecho="montar_treino_aumentado(X_treino, X_distancia_treino">Etapa 4: aumento de dados (seção 6).</li>
-            <li data-trecho="model = construir_cnn(len(classes))">Etapa 5: monta a CNN (seção 7).</li>
+            <li data-trecho="visualizacoes.exemplos_aumento(classes, X_treino, y_treino)">Etapa 4: o aumento é feito durante o treino; aqui só sai a figura de exemplo (seção 6).</li>
+            <li data-trecho="params = iniciar_pesos(len(classes), gerador)">Etapa 5: cria a CNN com pesos aleatórios (seção 7).</li>
             <li data-trecho="historico = treinar_rede(">Etapa 6: treina (esta seção).</li>
-            <li data-trecho="y_previsto = model.predict(X_teste">Etapa 7: avaliação no teste (seção 9).</li>
-            <li data-trecho="troca = teste_troca_de_fundo(">Teste de troca de fundo: a rede segue o rosto ou o cenário? (seção 10).</li>
+            <li data-trecho="y_previsto = prever(params, X_teste)">Etapa 7: avaliação no teste (seção 9).</li>
             <li data-trecho="visualizacoes.curvas_treino(historico)">Etapa 8: gera as imagens desta página.</li>
-            <li data-trecho="json.dump(classes, f">Grava os nomes dos integrantes antes do modelo (o servidor troca de modelo quando o arquivo muda).</li>
-            <li data-trecho="model.save(CAMINHO_MODELO)">Grava a rede treinada em <code>modelo/modelo_cnn.keras</code>.</li>
+            <li data-trecho="salvar_modelo(params, classes, CAMINHO_MODELO)">Grava os pesos e os nomes dos integrantes em <code>modelo/modelo_cnn.npz</code>.</li>
             <li data-trecho="json.dump(resultados, f">Grava as métricas e o histórico em <code>resultados.json</code>, lido por esta página.</li>
           </ol>
         </details>
@@ -776,7 +791,7 @@
         <ol class="passos">
           <li><strong>O servidor Node confere o dataset</strong> (pelo menos 2 integrantes e 3 fotos por pessoa) e roda o
             <strong>mesmo</strong> comando do terminal: <code>python -m src.treinar</code>.</li>
-          <li><strong>O Node guarda cada linha que o treino imprime</strong> (as etapas, as épocas do Keras, os avisos).
+          <li><strong>O Node guarda cada linha que o treino imprime</strong> (as etapas, as épocas, os avisos).
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="servidor/iniciarTreino"></pre>
@@ -790,14 +805,14 @@
             </details>
           </li>
           <li><strong>A página pergunta a cada segundo como está o treino</strong> e procura nas linhas a etapa atual
-            (“Etapa 6/8”), a época (“Epoch 12/60”) e a acurácia na validação, para desenhar a barra de progresso.
+            (“Etapa 6/8”), a época (“Época 12/150”) e a acurácia na validação, para desenhar a barra de progresso.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-js="treino.js#desenharTreino"></pre>
               <ol class="notas">
                 <li data-trecho='log.textContent = estado.linhas.join("\n")'>Mostra todas as linhas no log da página.</li>
                 <li data-trecho="ultima(estado.linhas, /^Etapa">Procura a última linha “Etapa N/8”.</li>
-                <li data-trecho="ultima(estado.linhas, /^Epoch">Procura a última linha “Epoch N/60”, impressa pelo Keras.</li>
+                <li data-trecho="ultima(estado.linhas, /^Época">Procura a última linha “Época N/150”, impressa por <code>treinar_rede</code>.</li>
                 <li data-trecho="const pct = n <= 5">Calcula a barra: a etapa 6 (treino) é a mais demorada e ocupa de 10% a 90%.</li>
               </ol>
             </details>
@@ -816,16 +831,7 @@
             maior probabilidade.</li>
           <li><strong>Montar a matriz de confusão.</strong> Uma tabela em que as <strong>linhas</strong> são o integrante real
             e as <strong>colunas</strong> o previsto. Cada foto soma 1 na célula (real, previsto). A diagonal são os acertos.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="metricas/matriz_confusao"></pre>
-              <ol class="notas">
-                <li data-trecho="matriz = np.zeros((n_classes, n_classes), dtype=int)">Começa com uma tabela de zeros, uma linha e uma coluna por integrante.</li>
-                <li data-trecho="for real, previsto in zip(y_real, y_previsto)">Percorre as fotos, com o integrante real e o previsto de cada uma.</li>
-                <li data-trecho="matriz[real, previsto] += 1">Soma 1 na célula (linha = real, coluna = previsto).</li>
-              </ol>
-            </details>
-          </li>
+            A contagem é feita pelo <code>confusion_matrix</code> do scikit-learn.</li>
           <li><strong>Tirar VP, FP, FN e VN de cada integrante <em>X</em>:</strong>
             <ul>
               <li><strong>VP</strong> (verdadeiro positivo): era X e a rede disse X. É a célula da diagonal.</li>
@@ -858,10 +864,10 @@
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="treinar/main"></pre>
               <ol class="notas">
-                <li data-trecho="y_previsto = model.predict(X_teste">Passo 1: probabilidades do teste; <code>argmax</code> fica com o integrante mais provável.</li>
-                <li data-trecho="matriz = matriz_confusao(">Passo 2: a matriz de confusão.</li>
+                <li data-trecho="y_previsto = prever(params, X_teste).argmax(axis=1)">Passo 1: probabilidades do teste; <code>argmax</code> fica com o integrante mais provável.</li>
+                <li data-trecho="matriz = confusion_matrix(">Passo 2: a matriz de confusão (<code>labels</code> garante uma linha para cada integrante, mesmo sem fotos).</li>
                 <li data-trecho="m = calcular_metricas(matriz)">Passos 3 e 4: VP, FP, FN, VN e as métricas.</li>
-                <li data-trecho="acuracias = {nome: acuracia(">Passo 5: a acurácia em cada um dos três conjuntos.</li>
+                <li data-trecho="acuracias = {nome: float(accuracy_score(">Passo 5: a acurácia em cada um dos três conjuntos.</li>
               </ol>
             </details>
           </li>
@@ -904,125 +910,69 @@
 
         <h3>Mapas de características</h3>
         <ol class="passos">
-          <li><strong>Montar um “modelo espião”:</strong> a mesma rede, com os mesmos pesos, mas que devolve a saída das 4
-            camadas convolucionais em vez da probabilidade final.</li>
-          <li><strong>Passar uma foto de teste</strong> por ele.</li>
+          <li><strong>Passar uma foto de teste pela rede.</strong> A ida (<code>propagar</code>) já guarda os mapas de cada
+            camada convolucional no cache, porque a retropropagação precisa deles. Basta lê-los.</li>
           <li><strong>Desenhar os 8 primeiros mapas de cada camada.</strong> Cada quadradinho é a resposta de um filtro: as
-            regiões claras são onde ele encontrou o seu padrão. Em <code>conv1</code> (96×96) ainda dá para ver o rosto,
+            regiões claras são onde ele encontrou o seu padrão. Em <code>conv1</code> (64×64) ainda dá para ver o rosto,
             porque os filtros detectam bordas; nas camadas seguintes, a resolução cai e os mapas ficam mais abstratos.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="visualizacoes/mapas_caracteristicas"></pre>
               <ol class="notas">
-                <li data-trecho='camadas = ["conv1", "conv2", "conv3", "conv4"]'>As 4 camadas que queremos ver.</li>
-                <li data-trecho="espiao = keras.Model(model.input">Passo 1: o modelo espião, com a mesma entrada e as saídas intermediárias.</li>
-                <li data-trecho="saidas = espiao.predict(foto[np.newaxis]">Passo 2: passa a foto (<code>np.newaxis</code> transforma 1 foto em um “lote” de 1).</li>
-                <li data-trecho="for coluna in range(8):">Passo 3: os 8 primeiros mapas de cada camada...</li>
+                <li data-trecho='camadas = ["conv1", "conv2", "conv3"]'>As 3 camadas que queremos ver.</li>
+                <li data-trecho="_, cache = propagar(params, foto[np.newaxis])">Passo 1: passa a foto (<code>np.newaxis</code> transforma 1 foto em um “lote” de 1).</li>
+                <li data-trecho='saidas = [z for _, z, _ in cache["convs"]]'>Passo 1: os mapas de cada bloco (depois da ReLU), guardados no cache.</li>
+                <li data-trecho="for coluna in range(8):">Passo 2: os 8 primeiros mapas de cada camada...</li>
                 <li data-trecho='cmap="viridis"'>...desenhados em cores: amarelo = resposta forte, roxo = fraca.</li>
               </ol>
             </details>
           </li>
         </ol>
         <figure class="figura">
-          <img data-resultado="mapas" alt="Os 8 primeiros mapas de características das 4 camadas convolucionais">
+          <img data-resultado="mapas" alt="Os 8 primeiros mapas de características das 3 camadas convolucionais">
           <figcaption>Os 8 primeiros mapas de cada camada convolucional.</figcaption>
         </figure>
 
         <h3>Onde a rede “olhou” (Grad-CAM)</h3>
         <ol class="passos">
-          <li><strong>Prever a foto e pegar a pontuação da pessoa prevista.</strong> Usamos a pontuação de antes do softmax
-            (camada <code>pontuacoes</code>): quando a rede tem quase 100% de certeza, a probabilidade quase não muda e a
-            conta seguinte daria zero.</li>
+          <li><strong>Prever a foto e pegar a pontuação da pessoa prevista.</strong> Usamos a pontuação de antes do softmax:
+            quando a rede tem quase 100% de certeza, a probabilidade quase não muda e a conta seguinte daria zero.</li>
           <li><strong>Calcular o gradiente:</strong> quanto essa pontuação muda quando cada valor dos mapas da
-            <code>conv4</code> muda.</li>
+            <code>conv3</code> muda. É a mesma retropropagação do treino, começando com 1 na pontuação da pessoa prevista e
+            parando na <code>conv3</code>.</li>
           <li><strong>Medir a importância de cada mapa:</strong> a média do gradiente dele.</li>
           <li><strong>Somar os mapas multiplicados pela importância</strong> e manter só os valores positivos. O resultado, de
-            12×12, é ampliado para 96×96 por interpolação bilinear (função <code>ampliar_bilinear</code>, que deixa o mapa suave
-            em vez de quadriculado) e pintado sobre a foto.
+            16×16, é ampliado para 64×64 por interpolação bilinear (<code>cv2.resize</code>) e pintado sobre a foto.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="reconhecimento/grad_cam"></pre>
               <ol class="notas">
-                <li data-trecho="with tf.GradientTape() as fita">“Grava” as contas da rede, para depois calcular gradientes.</li>
-                <li data-trecho="mapas, pontuacoes = modelo_gradcam(">Passo 1: passa a foto e recebe os mapas da conv4 e as pontuações.</li>
-                <li data-trecho="classe = int(tf.argmax(pontuacoes[0]))">Passo 1: o integrante previsto (maior pontuação).</li>
-                <li data-trecho="gradientes = fita.gradient(nota, mapas)">Passo 2: o gradiente da pontuação em relação aos mapas.</li>
-                <li data-trecho="importancia = tf.reduce_mean(">Passo 3: a importância de cada mapa (média do gradiente).</li>
-                <li data-trecho="calor = tf.nn.relu(tf.reduce_sum(">Passo 4: soma ponderada dos mapas; a ReLU mantém só os positivos.</li>
+                <li data-trecho="pontuacoes, cache = propagar(params, img[np.newaxis])">Passo 1: a ida, guardando os mapas no cache.</li>
+                <li data-trecho="classe = int(pontuacoes[0].argmax())">Passo 1: o integrante previsto (maior pontuação).</li>
+                <li data-trecho="d[0, classe] = 1">Passo 2: o ponto de partida da volta: derivada 1 só na pontuação dele.</li>
+                <li data-trecho='gradientes = retropropagar(params, cache, d, ate="conv3")'>Passo 2: retropropaga até os mapas da conv3.</li>
+                <li data-trecho='mapas = cache["convs"][2][1][0]'>Os 32 mapas da conv3 (16×16), guardados na ida.</li>
+                <li data-trecho="importancia = gradientes[0].mean(axis=(0, 1))">Passo 3: a importância de cada mapa (média do gradiente).</li>
+                <li data-trecho="calor = np.maximum((mapas * importancia).sum(axis=-1), 0)">Passo 4: soma ponderada dos mapas; o <code>maximum</code> mantém só os positivos.</li>
                 <li data-trecho="calor = calor / (calor.max() + 1e-9)">Escala o mapa de calor para 0–1.</li>
-                <li data-trecho="return ampliar_bilinear(calor, IMG_SIZE)">Amplia de 12×12 para 96×96 por interpolação bilinear.</li>
-              </ol>
-            </details>
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="reconhecimento/criar_modelo_gradcam"></pre>
-              <ol class="notas">
-                <li data-trecho="return keras.Model(model.input">Um modelo auxiliar que devolve, de uma vez, os mapas da <code>conv4</code> e as pontuações.</li>
+                <li data-trecho="return cv2.resize(calor, (IMG_SIZE, IMG_SIZE)">Amplia de 16×16 para 64×64 por interpolação bilinear.</li>
               </ol>
             </details>
           </li>
         </ol>
         <p>Se o calor estiver no <strong>rosto</strong>, a rede aprendeu o que queríamos. Se estiver no <strong>fundo</strong>,
           ela está usando o cenário para decidir, e precisamos de fotos em mais lugares diferentes.</p>
-        <p><strong>Atenção ao ler o mapa:</strong> a rede só olha o que precisa para separar as classes que conhece. Com uma
-          única pessoa no dataset (os outros são o urso e o fundo vazio), basta notar cabelo e pele humana para responder
-          o nome dela. Por isso o calor costuma cair no cabelo e no contorno da cabeça, e não nos olhos, nariz e boca. No
-          urso, ao contrário, o calor cai nos olhos, que são o que o diferencia. O mapa só vai se concentrar nos traços do
-          rosto quando houver pelo menos duas pessoas para a rede diferenciar.</p>
         <figure class="figura">
           <img data-resultado="gradcam" alt="Grad-CAM de uma foto de teste de cada integrante">
           <figcaption>Uma foto de teste de cada classe (em cima) e o mapa de calor do Grad-CAM (embaixo).</figcaption>
         </figure>
 
-        <h3>Teste de troca de fundo: a rede olha o rosto ou o cenário?</h3>
-        <p>O Grad-CAM mostra uma foto por vez. Este teste mede o mesmo em <strong>todas</strong> as fotos de teste:</p>
-        <ol class="passos">
-          <li><strong>Montar imagens “misturadas”.</strong> Para cada foto de teste de um integrante, sorteamos uma foto de
-            <strong>outro</strong> integrante e juntamos o rosto da primeira (o miolo do oval) com o entorno da segunda
-            (fundo, roupa, cabelo).
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="robustez/trocar_fundo"></pre>
-              <ol class="notas">
-                <li data-trecho="m = mascara_oval(IMG_SIZE, escala=0.7)">A mesma máscara oval, encolhida para 70%: o tamanho do rosto.</li>
-                <li data-trecho="return (X_rosto * m + X_entorno * (1 - m))">Onde a máscara vale 1, vem o rosto da primeira foto; onde vale 0, o entorno da segunda.</li>
-              </ol>
-            </details>
-          </li>
-          <li><strong>Ver a quem a rede atribui a imagem.</strong> Se responde o dono do rosto, aprendeu o rosto. Se responde o
-            dono do entorno, está reconhecendo pelo cenário. As fotos de teste vazias também entram: a rede deveria
-            responder “ninguém”.
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="robustez/teste_troca_de_fundo"></pre>
-              <ol class="notas">
-                <li data-trecho="entornos = np.array([gerador.choice(">Para cada foto, sorteia uma foto de outro integrante para servir de entorno.</li>
-                <li data-trecho="previsto = model.predict(trocar_fundo(">A resposta da rede para as imagens montadas.</li>
-                <li data-trecho='"segue_o_rosto": float('>Quanto maior, melhor: a rede seguiu o rosto.</li>
-                <li data-trecho='"segue_o_entorno": float('>Quanto <strong>menor</strong>, melhor: a rede seguiu o cenário.</li>
-                <li data-trecho='"vazio_e_ninguem": float('>Quanto maior, melhor: fotos sem pessoa reconhecidas como “ninguém”.</li>
-              </ol>
-            </details>
-          </li>
-        </ol>
-        <p class="destaque">Na primeira versão da rede (recorte do quarto inteiro, sem máscara e sem “ninguém”), o mesmo teste
-          deu <strong>92%</strong> para o dono do entorno e só <strong>8%</strong> para o dono do rosto: a rede reconhecia o
-          cenário, não a pessoa.</p>
-        <p><strong>Atenção ao ler o resultado:</strong> desde que o aumento de dados passou a fazer a troca de entorno
-          (seção 6), a rede é treinada com imagens montadas do mesmo jeito. O teste continua usando só fotos de teste (que
-          a rede nunca viu), mas a nota fica otimista. Ele não detecta objetos que ficam colados ao rosto em todas as fotos
-          de alguém (como um móvel logo atrás da cabeça), porque esses objetos ficam dentro do oval do rosto. Para isso,
-          o Grad-CAM e fotos da pessoa em outros lugares são o melhor teste.</p>
-        <figure class="figura">
-          <img data-resultado="troca_de_fundo" alt="Um exemplo de imagem montada e o resultado do teste de troca de fundo">
-          <figcaption>Um exemplo de imagem montada e o resultado do teste de troca de fundo no último treino.</figcaption>
-        </figure>
       </article>
 
       <!-- 11. Reconhecimento ao vivo -->
       <article id="ao-vivo" class="secao">
         <h2><span class="numero">11</span> Reconhecimento ao vivo</h2>
-        <p class="resumo">Cerca de 4 vezes por segundo, a página manda um quadro da webcam, a rede diz quem está em cada caixa
+        <p class="resumo">Cerca de 4 vezes por segundo, a página manda um quadro da webcam, o detector acha os rostos, a rede diz quem é cada um
           e a página desenha o nome por cima do vídeo.</p>
         <p>Três partes trabalham juntas: o <span class="lado navegador">Navegador</span> cuida da câmera e do desenho, o
           <span class="lado servidor">Node</span> cuida do HTTP e o <span class="lado python">Python</span> cuida só da rede
@@ -1039,7 +989,7 @@
               <ol class="notas">
                 <li data-trecho="while (ligado)">Repete enquanto a webcam estiver ligada.</li>
                 <li data-trecho="if (!congelado)">Não envia nada enquanto o painel “Ver o que a rede vê” estiver aberto.</li>
-                <li data-trecho='enviarJSON("/api/reconhecer"'>Captura o quadro (JPEG, qualidade 80%) e envia com o número de pessoas; o <code>await</code> espera a resposta.</li>
+                <li data-trecho='enviarJSON("/api/reconhecer"'>Captura o quadro (JPEG, qualidade 80%) e envia; o <code>await</code> espera a resposta.</li>
                 <li data-trecho="desenharCaixas(resposta)">Desenha o resultado (passo 6).</li>
                 <li data-trecho="INTERVALO_MS - (performance.now() - inicio)">Espera o que falta para completar ~250 ms entre quadros.</li>
               </ol>
@@ -1095,39 +1045,26 @@
               </ol>
             </details>
           </li>
-          <li><span class="lado python">Python</span> <strong>Divide a tela em faixas fixas.</strong> O trabalho não permite
-            usar um detector de rosto pronto, então a rede não sabe <em>onde</em> há rostos na imagem. A solução é dividir a
-            tela em faixas verticais fixas, uma por pessoa: com 1 pessoa, a faixa é a tela inteira, exatamente o enquadramento
-            das fotos de treino; com 2 pessoas, cada uma fica em uma metade (um pouco mais perto da câmera).
-            <details class="no-codigo">
-              <summary>Ver no código</summary>
-              <pre class="codigo" data-codigo="reconhecimento/regioes_da_tela"></pre>
-              <ol class="notas">
-                <li data-trecho="faixa = largura // n_pessoas">Divide a largura da tela em 1 ou 2 faixas verticais.</li>
-                <li data-trecho="return [(i * faixa, faixa)">Devolve onde cada faixa começa e a largura dela.</li>
-              </ol>
-            </details>
-          </li>
-          <li><span class="lado python">Python</span> <strong>Pré-processa e passa pela CNN.</strong> Cada faixa passa pelo
-            <strong>mesmo</strong> <code>preprocessar</code> do treino, que recorta o quadrado do rosto e aplica a máscara
-            oval, e todas vão para a rede de uma vez. A resposta (posição do quadrado do rosto de cada faixa e as
-            probabilidades) volta pelo Node até a página.
+          <li><span class="lado python">Python</span> <strong>Acha os rostos, pré-processa e passa pela CNN.</strong> O
+            detector acha todos os rostos do quadro, em qualquer posição. Cada um passa pelo <strong>mesmo</strong>
+            tratamento do treino (recorte, 64×64, CLAHE, suavização, máscara) e todos vão para a rede de uma vez. A resposta
+            (a caixa de cada rosto e as probabilidades) volta pelo Node até a página. Sem rosto, a lista vem vazia: ninguém.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="reconhecimento/reconhecer_quadro"></pre>
               <ol class="notas">
-                <li data-trecho="for x0, faixa in regioes_da_tela(largura, n_pessoas)">As faixas do passo 4.</li>
-                <li data-trecho="entradas.append(preprocessar(quadro[:, x0:x0 + faixa]))">Aplica na faixa o mesmo pré-processamento do treino (recorte do rosto, cinza, 96×96, equalização, máscara).</li>
-                <li data-trecho="topo, esquerda, lado = caixa_do_rosto(altura, faixa)">Calcula onde ficou o quadrado do rosto, para a página desenhar o oval no lugar certo.</li>
-                <li data-trecho="probs = model(np.array(entradas), training=False)">Passa todas as faixas pela rede de uma vez (<code>training=False</code> desliga o dropout).</li>
-                <li data-trecho='return [{"x": int(x)'>Devolve a posição de cada quadrado e as probabilidades de cada classe.</li>
+                <li data-trecho="cinza = cv2.cvtColor(quadro, cv2.COLOR_RGB2GRAY)">Tons de cinza (uma vez para o quadro inteiro).</li>
+                <li data-trecho="rostos = detectar_rostos(cinza)">O detector da seção 4: uma caixa para cada rosto.</li>
+                <li data-trecho="if not rostos:">Nenhum rosto: devolve a lista vazia, e a página mostra “ninguém na imagem”.</li>
+                <li data-trecho="probs = prever(params, np.array([tratar_rosto(cinza, caixa) for caixa in rostos]))">Trata cada rosto como no treino e passa todos pela rede de uma vez (sem dropout).</li>
+                <li data-trecho='return [{"x": x, "y": y, "lado": lado'>Devolve a posição de cada rosto e as probabilidades de cada integrante.</li>
               </ol>
             </details>
           </li>
           <li><span class="lado navegador">Navegador</span> <strong>Faz a média e desenha.</strong> De um quadro para o outro,
             as probabilidades oscilam um pouco; para o nome não ficar “piscando”, a página usa a <strong>média dos últimos 5
-            quadros</strong> de cada caixa. Se a classe vencedora for “ninguém”, o oval fica cinza com “ninguém”. Se a maior
-            probabilidade média ficar abaixo do limiar (60% por padrão), o oval fica vermelho com “desconhecido”.
+            quadros</strong> de cada rosto. Se a maior probabilidade média ficar abaixo do limiar (60% por padrão), o oval
+            fica vermelho com “desconhecido”.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-js="ao_vivo.js#mediaDosUltimos"></pre>
@@ -1140,13 +1077,14 @@
               <summary>Ver no código</summary>
               <pre class="codigo" data-js="ao_vivo.js#desenharCaixas"></pre>
               <ol class="notas">
-                <li data-trecho="const media = mediaDosUltimos(i, caixa.probabilidades)">A média dos últimos 5 quadros desta caixa.</li>
+                <li data-trecho="if (historico.length !== resposta.caixas.length) historico = []">Entrou ou saiu alguém da imagem: recomeça a média.</li>
+                <li data-trecho="const media = mediaDosUltimos(i, caixa.probabilidades)">A média dos últimos 5 quadros deste rosto.</li>
                 <li data-trecho="const melhor = media.indexOf(Math.max(...media))">A classe com a maior probabilidade média.</li>
                 <li data-trecho="const reconhecido = media[melhor] >= limiar.value / 100">Reconhecido só se passar do limiar escolhido no controle deslizante.</li>
-                <li data-trecho='const vazio = resposta.classes[melhor] === "ninguem"'>A rede acha que não há ninguém no oval.</li>
                 <li data-trecho="const x = espelhar.checked ? tela.width - caixa.x - caixa.lado : caixa.x">Vídeo espelhado: só a posição x da caixa é espelhada (o texto continua legível).</li>
-                <li data-trecho="ctx.ellipse(">Desenha o oval-guia, do mesmo tamanho da máscara do pré-processamento (verde, vermelho ou cinza).</li>
+                <li data-trecho="ctx.ellipse(">Desenha o oval no rosto, do mesmo formato da máscara (verde ou vermelho).</li>
                 <li data-trecho="ctx.fillText(">Escreve o nome e a confiança.</li>
+                <li data-trecho='|| "ninguém na imagem"'>Sem nenhum rosto no quadro: “ninguém na imagem”.</li>
               </ol>
             </details>
           </li>
@@ -1160,17 +1098,19 @@
         <h3>O botão “Ver o que a rede vê”</h3>
         <ol class="passos">
           <li><strong>Congela o quadro atual</strong> e o envia ao Python.</li>
-          <li><strong>O Python devolve as imagens de cada etapa</strong> do pré-processamento do oval central, o Grad-CAM
+          <li><strong>O Python devolve as imagens de cada etapa</strong> do pré-processamento do maior rosto, o Grad-CAM
             pintado sobre a entrada e as probabilidades de cada integrante, que a página mostra lado a lado.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="servico/etapas"></pre>
               <ol class="notas">
                 <li data-trecho="preprocessar(quadro, mostrar_etapas=True)">O mesmo pré-processamento, pedindo também as imagens intermediárias.</li>
-                <li data-trecho='probs = m["model"](entrada[np.newaxis]'>As probabilidades de cada integrante.</li>
-                <li data-trecho='calor, _ = grad_cam(m["gradcam"], entrada)'>O mapa de calor do Grad-CAM (seção 10).</li>
+                <li data-trecho="if entrada is None:">Sem rosto no quadro, devolve uma mensagem de erro para a página.</li>
+                <li data-trecho='probs = prever(m["params"], entrada[np.newaxis])[0]'>As probabilidades de cada integrante.</li>
+                <li data-trecho='calor, _ = grad_cam(m["params"], entrada)'>O mapa de calor do Grad-CAM (seção 10).</li>
+                <li data-trecho="cv2.applyColorMap(">Pinta o calor com a escala de cores “jet” (azul = frio, vermelho = quente).</li>
                 <li data-trecho="mistura = 0.55 * entrada * 255 + 0.45 * colorido">Mistura a foto em cinza (55%) com o calor colorido (45%).</li>
-                <li data-trecho='"etapas": [png_base64('>Converte cada imagem em PNG para o navegador mostrar.</li>
+                <li data-trecho='"etapas": [png_base64(img)'>Converte cada imagem em PNG para o navegador mostrar.</li>
               </ol>
             </details>
           </li>
@@ -1182,45 +1122,51 @@
         <h2><span class="numero">12</span> Perguntas prováveis na apresentação</h2>
         <h3>Dados e pré-processamento</h3>
         <dl class="perguntas">
-          <dt>Por que recortar em vez de só redimensionar?</dt>
-          <dd>Redimensionar uma foto retangular para quadrado achataria o rosto. E o recorte fechado no rosto (60% do menor lado) deixa a maior parte do fundo de fora.</dd>
+          <dt>Por que usar um detector de rosto pronto?</dt>
+          <dd>A regra do trabalho é que a <strong>CNN</strong> seja feita por nós. O detector Haar só diz <em>onde</em> há um rosto (não <em>quem</em> é) e substitui o oval fixo da versão anterior, em que a pessoa precisava se encaixar e o cenário vazava para o recorte.</dd>
           <dt>Para que serve a máscara oval?</dt>
-          <dd>Para a rede não aprender o cenário. Sem ela, a primeira versão da rede reconhecia o quarto de cada pessoa: com o rosto de uma pessoa colado no cenário de outra, respondia o dono do cenário em 92% das vezes. A máscara troca tudo fora do oval do rosto por cinza.</dd>
-          <dt>Por que não usar um detector de rosto?</dt>
-          <dd>O trabalho não permite detectores prontos (como os do OpenCV). Por isso o rosto fica em uma posição fixa (o oval desenhado na tela) e todo o tratamento é feito por nós com NumPy.</dd>
+          <dd>O quadrado do detector ainda tem cantos com cabelo, orelha e fundo. A máscara troca esses cantos por cinza, para a rede aprender pelo rosto. Na primeira versão, sem detector e sem máscara, a rede reconhecia o quarto de cada pessoa em vez do rosto.</dd>
           <dt>Por que tons de cinza?</dt>
           <dd>A identidade está na forma do rosto, não na cor. Com 1 canal a rede fica menor e depende menos da iluminação.</dd>
-          <dt>Por que a média de blocos antes de reduzir?</dt>
-          <dd>Pegar só 1 pixel a cada 5 (ou a cada 30, em fotos grandes) gera serrilhado. A média resume todos os pixels do bloco.</dd>
-          <dt>O que a equalização faz?</dt>
-          <dd>Usa o histograma acumulado para espalhar os tons de cinza de 0 a 255, deixando fotos claras e escuras parecidas.</dd>
+          <dt>O que é o CLAHE e por que não a equalização comum?</dt>
+          <dd>A equalização comum usa um histograma só para a imagem inteira: se metade do rosto está na sombra, continua escura. O CLAHE equaliza cada bloco (4×4 blocos) separadamente e limita o contraste para não realçar demais o ruído. Assim, a mesma pessoa com luz de lado ou de cima fica parecida.</dd>
+          <dt>Por que suavizar a imagem?</dt>
+          <dd>O CLAHE realça também o “chuvisco” da câmera. Um filtro gaussiano 3×3 depois dele tira esse ruído sem apagar os traços do rosto.</dd>
           <dt>Por que dividir em blocos de fotos seguidas?</dt>
           <dd>Fotos seguidas são quase iguais. Separá-las ao acaso colocaria “gêmeas” no treino e no teste, inflando a nota.</dd>
           <dt>Por que aumento de dados só no treino?</dt>
           <dd>O teste precisa medir o desempenho em fotos reais.</dd>
           <dt>Por que a rede confundia o Luiz com o urso de pelúcia?</dt>
           <dd>Por um erro de rótulo: a pasta <code>bolotas/</code> tinha 89 fotos do Luiz de perto. A rede aprendeu “Luiz de perto = bolotas”. Depois que tiramos essas fotos da pasta e retreinamos, ela acertou todas as fotos de perto (seção 2).</dd>
+          <dt>Por que algumas fotos são descartadas?</dt>
+          <dd>Se o detector não acha um rosto (pessoa de perfil, de costas, com a mão no rosto, foto borrada), a foto não tem o que ensinar sobre o rosto e sai do treino. O log mostra quantas saíram por integrante.</dd>
           <dt>Quantas fotos e de onde?</dt>
           <dd>Mais importante que a quantidade é a variedade: 150 a 300 fotos por pessoa, em 3 ou mais sessões com lugares, luz e distâncias diferentes, com todos fotografados nos mesmos lugares.</dd>
         </dl>
         <h3>A rede</h3>
         <dl class="perguntas">
+          <dt>Vocês usaram TensorFlow ou Keras?</dt>
+          <dd>Não. A CNN inteira está em <code>src/modelo.py</code>, só com NumPy: a ida (convolução, pooling, densa, softmax), a volta (retropropagação de cada camada), o Adam e o dropout. O laço de treino e a parada antecipada estão em <code>src/treinar.py</code>.</dd>
+          <dt>Como vocês sabem que a retropropagação está certa?</dt>
+          <dd>Pelo teste de gradiente (<code>tests/test_modelo.py</code>): para pesos de todas as camadas, o gradiente calculado tem que ser igual à derivada numérica <code>(erro(w + h) − erro(w − h)) / 2h</code>.</dd>
+          <dt>Como a convolução fica rápida sem biblioteca de rede neural?</dt>
+          <dd>Com o “im2col”: <code>sliding_window_view</code> monta todas as janelas 3×3 da imagem sem copiar, e <code>np.tensordot</code> faz a convolução inteira como uma única multiplicação de matrizes. Um lote de 32 fotos (ida e volta) leva cerca de 0,1 s.</dd>
           <dt>Por que CNN e não uma rede comum (densa)?</dt>
           <dd>O mesmo filtro percorre a imagem inteira, então a rede precisa de muito menos parâmetros e reconhece o padrão em qualquer posição.</dd>
           <dt>Quantos parâmetros tem uma convolução?</dt>
-          <dd><code>3 · 3 · canais_de_entrada · filtros + filtros</code> (o último termo é o bias). Por exemplo, <code>conv2</code> tem 3·3·32·64 + 64 = 18.496. A tabela da seção 7 mostra todas as camadas.</dd>
+          <dd><code>3 · 3 · canais_de_entrada · filtros + filtros</code> (o último termo é o bias). Por exemplo, <code>conv2</code> tem 3·3·8·16 + 16 = 1.168. A tabela da seção 7 mostra todas as camadas.</dd>
           <dt>O que faz o pooling?</dt>
           <dd>Reduz a imagem pela metade (menos contas) e torna a rede tolerante a pequenos deslocamentos.</dd>
           <dt>Para que serve o dropout?</dt>
           <dd>Desligar neurônios ao acaso obriga a rede a não depender de poucos deles, o que reduz o overfitting.</dd>
           <dt>Por que softmax?</dt>
           <dd>Ele transforma as pontuações da última camada em probabilidades que somam 1, uma para cada classe.</dd>
-          <dt>Para que serve a classe “ninguém”?</dt>
-          <dd>O softmax sempre escolhe uma das classes que conhece. Sem a classe “ninguém”, a rede era obrigada a dizer o nome de alguém até para uma cadeira vazia (com 97% de confiança para uma imagem cinza lisa). Com ela, a rede tem uma resposta certa para “não há pessoa no oval”.</dd>
+          <dt>Como a rede responde “ninguém”?</dt>
+          <dd>Quem responde é o detector: se ele não acha rosto no quadro, a página mostra “ninguém na imagem” e a rede nem é chamada. Por isso não precisamos mais de uma classe “ninguém” treinada com fotos de fundo.</dd>
           <dt>O Grad-CAM é um sistema pronto?</dt>
-          <dd>Não. É uma função nossa (<code>grad_cam</code>) que só explica a decisão da nossa CNN, sem participar do reconhecimento. Do TensorFlow ela usa apenas o cálculo do gradiente, o mesmo que a rede usa para aprender. A ampliação do mapa para 96×96 (<code>ampliar_bilinear</code>) é NumPy.</dd>
+          <dd>Não. É uma função nossa (<code>grad_cam</code>) que usa a mesma retropropagação do treino, parando na <code>conv3</code>. Ela só explica a decisão da rede, sem participar do reconhecimento.</dd>
           <dt>Como vocês sabem que a rede olha o rosto, e não o fundo?</dt>
-          <dd>Pelo Grad-CAM (seção 10) e pelo teste de troca de fundo: juntamos o rosto de um integrante com o entorno de outro e vemos a quem a rede atribui a imagem.</dd>
+          <dd>Pelo Grad-CAM (seção 10). E, com o recorte justo do detector e a máscara oval, quase não sobra fundo na imagem que a rede recebe.</dd>
           <dt>O que são época e batch?</dt>
           <dd>Época é uma passada completa pelo treino. Batch é o grupo de fotos (32) usado em cada ajuste dos pesos.</dd>
           <dt>Como a rede aprende?</dt>
@@ -1236,15 +1182,15 @@
         <h3>O site e o reconhecimento ao vivo</h3>
         <dl class="perguntas">
           <dt>Como reconhece várias pessoas ao vivo?</dt>
-          <dd>Sem detector de rosto, a rede não sabe onde estão os rostos. Por isso a tela é dividida em faixas fixas, cada uma com o seu oval, e cada pessoa se posiciona em uma. Achar rostos em qualquer lugar exigiria um detector (como os do OpenCV), que o trabalho não permite.</dd>
+          <dd>O detector acha todos os rostos do quadro, em qualquer posição, e cada rosto passa pela rede. Todos vão num lote só, então 2 ou 3 pessoas custam quase o mesmo que 1.</dd>
           <dt>Quais são as limitações?</dt>
-          <dd>O rosto precisa estar dentro do oval. Pessoas de fora do grupo não têm classe própria: para elas usamos o limiar de 60% (“desconhecido”), que nem sempre basta. A classe “ninguém” funciona melhor com fotos reais dos lugares vazios na pasta <code>dataset/ninguem/</code>. E se as fotos de alguém vierem de um só cômodo, o teste usa esse mesmo cômodo, e a nota fica otimista em relação a um lugar novo.</dd>
+          <dd>O detector Haar só acha rostos de frente (até uns 30° de giro). Pessoas de fora do grupo não têm classe própria: para elas usamos o limiar de 60% (“desconhecido”), que nem sempre basta. E se as fotos de alguém vierem de um só cômodo e de uma só luz, a nota no teste fica otimista em relação a um lugar novo.</dd>
           <dt>Por que a rede roda no servidor e não no navegador?</dt>
           <dd>Para usar exatamente o mesmo código Python do treino (<code>preprocessar</code> e o modelo salvo). Assim, não existe uma segunda versão do pré-processamento que poderia ficar diferente.</dd>
           <dt>Por que um servidor Node e um processo Python?</dt>
           <dd>Cada um faz o que faz melhor: o Node cuida do HTTP (site, rotas, gravação das fotos) e o Python cuida só da rede neural. Eles conversam pelo stdin/stdout, uma linha de JSON por pedido; o Python fica aberto o tempo todo, então o modelo é carregado uma vez só.</dd>
           <dt>Como o site mostra o progresso do treino?</dt>
-          <dd>O servidor Node roda <code>python -m src.treinar</code> e guarda o que ele imprime. A página pergunta a cada segundo como está o treino e lê as linhas “Etapa N/8” e “Epoch N/60” para desenhar a barra.</dd>
+          <dd>O servidor Node roda <code>python -m src.treinar</code> e guarda o que ele imprime. A página pergunta a cada segundo como está o treino e lê as linhas “Etapa N/8” e “Época N/150” para desenhar a barra.</dd>
           <dt>Por que a média de 5 quadros?</dt>
           <dd>Para o nome não “piscar” quando um quadro isolado sai diferente. Com ~4 quadros por segundo, a média cobre pouco mais de 1 segundo.</dd>
           <dt>O vídeo espelhado não atrapalha a rede?</dt>
@@ -1259,7 +1205,7 @@
 </main>
 
 <footer class="rodape">
-  <div class="largura">CNN treinada do zero com TensorFlow/Keras · tratamento das imagens e métricas com NumPy · servidor Node.js · site em HTML, CSS e JavaScript puros.</div>
+  <div class="largura">CNN feita à mão com NumPy · detector de rosto e correções de imagem com OpenCV · métricas com scikit-learn · servidor Node.js · site em HTML, CSS e JavaScript puros.</div>
 </footer>
 
 <script src="js/ao_vivo.js"></script>
