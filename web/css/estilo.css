@@ -207,6 +207,9 @@ table.matriz td { text-align: center; min-width: 72px; font-weight: 600;
 table.matriz td small { display: block; font-weight: 400; font-size: 0.78rem; opacity: 0.85; }
 table.matriz td.forte { color: var(--destaque-texto); }
 table.matriz td.diagonal { outline: 2px solid var(--verde); outline-offset: -3px; }
+.janela { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 20px; border: 1px solid var(--borda);
+  border-radius: var(--raio); background: var(--fundo); color: var(--texto); }
+.janela::backdrop { background: rgba(0, 0, 0, 0.55); }
 table.matriz .canto { font-weight: 400; font-size: 0.8rem; color: var(--texto-suave); }
 
 /* Cartões com números */

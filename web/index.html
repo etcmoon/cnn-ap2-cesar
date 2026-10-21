@@ -47,6 +47,7 @@
       <label class="campo linha"><input type="checkbox" id="espelhar" checked> Mostrar o vídeo espelhado</label>
 
       <button id="ver-rede" class="botao" disabled>Ver o que a rede vê</button>
+      <button id="ver-matriz" class="botao">Ver matriz de confusão</button>
 
       <p id="status" class="status">Clique em “Ligar webcam” para começar.</p>
       <div id="leitura-ao-vivo" class="leitura"></div>
@@ -62,6 +63,16 @@
     <div class="etapas" id="etapas"></div>
     <div id="barras" class="barras"></div>
   </section>
+
+  <!-- Janela da matriz de confusão do último treino (<dialog> nativo; o conteúdo vem de documentacao.js) -->
+  <dialog id="janela-matriz" class="janela" aria-labelledby="janela-matriz-titulo">
+    <div class="visao-topo">
+      <h2 id="janela-matriz-titulo">Matriz de confusão (teste)</h2>
+      <form method="dialog"><button class="botao principal">Fechar</button></form>
+    </div>
+    <p class="nota">Linhas = quem era de verdade, colunas = quem a rede disse. A diagonal (contorno verde) são os acertos.</p>
+    <div id="janela-matriz-conteudo"><p class="sem-imagem">Disponível depois do primeiro treino.</p></div>
+  </dialog>
 
   <!-- Preparar o modelo: coleta das fotos e treino da rede, sem precisar do terminal (seção recolhível).
        Abre sozinha quando ainda não existe modelo treinado. -->

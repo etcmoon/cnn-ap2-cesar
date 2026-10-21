@@ -212,7 +212,8 @@ function preencherResultados(r) {
     });
     html += "</tr>";
   });
-  document.getElementById("matriz-html").innerHTML = html + "</tbody></table></div>";
+  html += "</tbody></table></div>";
+  document.getElementById("matriz-html").innerHTML = html;
 
   // Tabela de métricas por integrante + média macro
   const media = (lista) => lista.reduce((a, b) => a + b, 0) / lista.length;
@@ -220,10 +221,12 @@ function preencherResultados(r) {
     porcento(m.precisao[i]), porcento(m.recall[i]), porcento(m.f1[i]), porcento(m.especificidade[i])]);
   linhasMetricas.push(["<strong>média macro</strong>", "", "", "", "", porcento(media(m.precisao)),
     porcento(media(m.recall)), porcento(media(m.f1)), porcento(media(m.especificidade))]);
-  document.getElementById("tabela-metricas").innerHTML =
+  const htmlMetricas =
     tabela(["Integrante", "VP", "FP", "FN", "VN", "Precisão", "Recall", "F1", "Especificidade"], linhasMetricas, "total") +
     `<p class="nota">Acurácia no teste: <strong>${porcento(m.acuracia)}</strong> (${r.totais.teste} fotos). ` +
     `Resultados do treino de ${escaparHTML(r.gerado_em)}.</p>`;
+  document.getElementById("tabela-metricas").innerHTML = htmlMetricas;
+  document.getElementById("janela-matriz-conteudo").innerHTML = html + htmlMetricas;   // botão "Ver matriz de confusão"
 
   // Acurácia nos três conjuntos
   document.getElementById("acuracias").innerHTML = blocosDeNumeros([
@@ -274,3 +277,8 @@ document.querySelectorAll("pre[data-codigo]").forEach(carregarCodigoPython);
 document.querySelectorAll("pre[data-js]").forEach((pre) => carregarCodigoJS(pre, arquivosJS));
 carregarResultados();
 acompanharIndice();
+
+// Botão "Ver matriz de confusão": abre a janela; clicar fora dela também fecha
+const janelaMatriz = document.getElementById("janela-matriz");
+document.getElementById("ver-matriz").addEventListener("click", () => janelaMatriz.showModal());
+janelaMatriz.addEventListener("click", (evento) => { if (evento.target === janelaMatriz) janelaMatriz.close(); });

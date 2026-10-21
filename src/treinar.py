@@ -144,6 +144,10 @@ def main():
         json.dump(resultados, f, ensure_ascii=False, indent=2)
 
     # Resumo no terminal
+    print("\nMatriz de confusão (teste) - linhas = real, colunas = previsto:")
+    print(" " * 16 + "".join(f"{nome[:10]:>11}" for nome in classes))
+    for i, nome in enumerate(classes):
+        print(f"{nome:>15} " + "".join(f"{v:>11}" for v in matriz[i]))
     print(f"\n{'integrante':>15} | precisão | recall |   F1  | especificidade | fotos no teste")
     for i, nome in enumerate(classes):
         print(f"{nome:>15} |   {m['precisao'][i]:.3f}  |  {m['recall'][i]:.3f} | {m['f1'][i]:.3f} |"
