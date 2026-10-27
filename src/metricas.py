@@ -4,10 +4,12 @@ import numpy as np
 
 def calcular_metricas(matriz):
     # Tira VP, FP, FN e VN da matriz (um valor por integrante) e calcula as métricas.
-    # Linhas = integrante real, colunas = integrante previsto.
+    # Linhas = integrante real, colunas = integrante previsto. A matriz pode ter uma coluna a mais no fim,
+    # "desconhecido": uma foto de integrante rejeitada conta como FN dele (a rede não disse quem era).
+    n = matriz.shape[0]
     VP = np.diag(matriz)                      # diagonal: era X e a rede disse X
-    FP = matriz.sum(axis=0) - VP              # resto da coluna: a rede disse X, mas era outra pessoa
-    FN = matriz.sum(axis=1) - VP              # resto da linha: era X, mas a rede disse outra pessoa
+    FP = matriz.sum(axis=0)[:n] - VP          # resto da coluna: a rede disse X, mas era outra pessoa
+    FN = matriz.sum(axis=1) - VP              # resto da linha: era X, mas a rede disse outra pessoa ou desconhecido
     VN = matriz.sum() - VP - FP - FN          # todo o resto da matriz
 
     # np.maximum evita divisão por zero quando alguém não aparece no teste

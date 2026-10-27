@@ -1,10 +1,16 @@
 // Coleta de fotos para o dataset pelo navegador.
 // "Ver câmera" liga a webcam antes da captura, para a pessoa se posicionar com calma.
-// "Iniciar captura" faz uma contagem regressiva de 3 s, tira N fotos (uma a cada 250 ms) e envia para /api/fotos,
-// que salva em dataset/<nome>/. Depois atualiza a tabela do passo 2 e, se a opção estiver marcada, já começa o treino.
+// "Iniciar captura" faz uma contagem regressiva de 3 s, tira N fotos (uma a cada 400 ms) pedindo poses diferentes e
+// envia para /api/fotos, que salva em dataset/<nome>/ como uma captura nova (_sNN no nome do arquivo).
+// Depois atualiza a tabela do passo 2 e, se a opção estiver marcada, já começa o treino.
 // Usa esperar, enviarJSON, capturarQuadro e mostrarStatus de ao_vivo.js, e atualizarDataset/iniciarTreino de treino.js.
 
 // Não há guia na tela: no treino, o detector de rostos acha o rosto em qualquer lugar da foto.
+
+// Poses pedidas durante a captura, cada uma por 1/8 das fotos: fotos variadas ensinam a IDENTIDADE,
+// e não "a pessoa séria olhando de frente"
+const POSES = ["olhe de frente", "vire um pouco para a esquerda", "vire um pouco para a direita", "olhe um pouco para cima",
+  "olhe um pouco para baixo", "sorria", "faça cara séria", "abra a boca, como se falasse"];
 
 const videoColeta = document.getElementById("coleta-video");
 const botaoColeta = document.getElementById("coleta-iniciar");
@@ -84,12 +90,13 @@ async function coletarFotos() {
   }
   contagem.textContent = "";
 
-  // 3. Tira n fotos, uma a cada 250 ms (guardadas como JPEG em texto)
+  // 3. Tira n fotos, uma a cada 400 ms (guardadas como JPEG em texto), trocando de pose a cada 1/8 da captura
   const fotos = [];
   for (let i = 0; i < n; i++) {
+    const pose = POSES[Math.floor(i * POSES.length / n)];
+    mostrarStatus(statusColeta, `${nome}: ${pose.toUpperCase()} · foto ${i + 1} de ${n}`);
     fotos.push(capturarQuadro(videoColeta, 0.9));
-    mostrarStatus(statusColeta, `${nome}: foto ${i + 1} de ${n} (mexa levemente a cabeça, sem tampar o rosto)`);
-    await esperar(250);
+    await esperar(400);
   }
 
   // 4. Desliga a câmera (se foi ligada só para a captura) e envia as fotos ao servidor

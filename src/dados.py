@@ -1,6 +1,7 @@
 # Leitura das fotos do dataset (a gravação das fotos coletadas no site é feita pelo servidor Node).
 import os
 import io
+import re
 import base64
 import numpy as np
 from PIL import Image, ImageOps
@@ -32,6 +33,12 @@ def listar_dataset(pasta=DATASET_DIR):
                 caminhos.append(os.path.join(subpasta, arquivo))
                 rotulos.append(numero)
     return classes, caminhos, np.array(rotulos)
+
+
+def sessao_da_foto(caminho):
+    # Número da captura, gravado no nome pelo site: "ana_s03_0042.jpg" -> 3. Fotos antigas, sem "_sNN", são a sessão 0.
+    achou = re.search(r"_s(\d+)_", os.path.basename(caminho))
+    return int(achou.group(1)) if achou else 0
 
 
 def imagem_de_dataurl(texto):

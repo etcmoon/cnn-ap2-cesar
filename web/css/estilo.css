@@ -13,7 +13,6 @@
   --verde: #1e8a3c;
   --vermelho: #c62828;
   --codigo-fundo: #f1efe8;
-  --codigo-comentario: #6a737d;
   --sombra: 0 1px 3px rgba(0, 0, 0, 0.08);
   --raio: 10px;
   --fonte-texto: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -36,7 +35,6 @@
     --verde: #4cc070;
     --vermelho: #ef6b6b;
     --codigo-fundo: #111316;
-    --codigo-comentario: #8b949e;
     --sombra: none;
     color-scheme: dark;
   }
@@ -166,30 +164,11 @@ code { font-family: var(--fonte-codigo); font-size: 0.9em; background: var(--cod
   .moldura.pequena { max-width: none; }
 }
 
-/* ======================= Documentação ======================= */
-.docs { border-top: 1px solid var(--borda); padding: 32px 0 48px; }
-.docs-grade { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; align-items: start; }
-
-/* Índice lateral fixo */
-.indice { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; font-size: 0.93rem; }
-.indice-titulo { margin: 0 0 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.8rem; color: var(--texto-suave); }
-.indice ol { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }
-.indice a { color: var(--texto-suave); text-decoration: none; }
-.indice a:hover, .indice a.atual { color: var(--destaque); }
-.indice a.atual { font-weight: 600; }
-.indice-topo { margin-top: 16px; }
-
-.docs-conteudo { min-width: 0; }
-.secao { padding: 8px 0 36px; border-bottom: 1px solid var(--borda); margin-bottom: 28px; scroll-margin-top: 16px; }
-.secao:last-child { border-bottom: 0; }
-.secao h2 { font-size: 1.6rem; margin: 0 0 14px; display: flex; align-items: baseline; gap: 12px; }
-.secao h3 { font-size: 1.15rem; margin: 28px 0 10px; }
-.secao p, .secao li, .secao dd { max-width: 78ch; }
+/* Número redondo dos passos, notas e tabelas da janela de resultados */
 .numero {
   font: 700 0.9rem var(--fonte-texto); color: var(--destaque-texto); background: var(--destaque);
   border-radius: 999px; min-width: 1.9em; height: 1.9em; display: inline-grid; place-items: center; flex: none;
 }
-.destaque { border-left: 4px solid var(--destaque); padding: 8px 14px; background: var(--superficie); border-radius: 0 8px 8px 0; }
 .nota { color: var(--texto-suave); font-size: 0.92rem; }
 
 /* Tabelas */
@@ -211,119 +190,14 @@ table.matriz td.diagonal { outline: 2px solid var(--verde); outline-offset: -3px
   border-radius: var(--raio); background: var(--fundo); color: var(--texto); }
 .janela::backdrop { background: rgba(0, 0, 0, 0.55); }
 table.matriz .canto { font-weight: 400; font-size: 0.8rem; color: var(--texto-suave); }
+.janela h3 { margin: 20px 0 6px; font-size: 1.05rem; }
 
-/* Cartões com números */
-.numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
-.cartao { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 12px 14px; display: flex; flex-direction: column; }
-.cartao strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
-.cartao span { color: var(--texto-suave); font-size: 0.88rem; }
-
-/* Blocos de código */
-.codigo-titulo { margin-top: 18px; font: 600 0.82rem var(--fonte-codigo); color: var(--texto-suave); }
-pre.codigo, pre.bloco {
+/* Log do treino */
+pre.bloco {
   margin: 6px 0 16px; padding: 14px 16px; overflow-x: auto;
   background: var(--codigo-fundo); border: 1px solid var(--borda); border-radius: 8px;
   font: 0.86rem/1.55 var(--fonte-codigo); tab-size: 4;
 }
-pre.codigo:empty::before { content: "Carregando o código..."; color: var(--texto-suave); }
-pre code { background: none; padding: 0; font-size: inherit; }
-.comentario { color: var(--codigo-comentario); font-style: italic; }
-
-/* Resumo de uma frase no começo de cada seção e caixa "Como ler" */
-.resumo { font-size: 1.08rem; color: var(--texto); border-left: 4px solid var(--destaque); padding-left: 14px; }
-.como-ler { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 16px; margin: 18px 0; max-width: 78ch; }
-.exemplo-botao { font: 600 0.85rem var(--fonte-codigo); color: var(--destaque); white-space: nowrap; }
-.exemplo-linha { background: color-mix(in srgb, var(--destaque) 14%, transparent); padding: 0 4px; border-radius: 3px; }
-
-/* Passo a passo: o texto vem primeiro; o código fica dentro de "Ver no código" */
-.passos { padding-left: 1.6em; display: flex; flex-direction: column; gap: 14px; margin: 14px 0; }
-.passos > li { padding-left: 4px; max-width: none; }
-.passos > li::marker { font-weight: 700; color: var(--destaque); }
-.passos > li > strong:first-of-type { color: var(--texto); }
-.passos.ciclo > li > .lado { margin-right: 4px; }
-
-.no-codigo { margin: 10px 0 2px; }
-.no-codigo > summary {
-  cursor: pointer; display: inline-block; list-style-position: inside;
-  font: 600 0.82rem var(--fonte-codigo); color: var(--destaque);
-  padding: 4px 10px; border: 1px solid var(--borda); border-radius: 6px; background: var(--superficie);
-}
-.no-codigo > summary:hover { border-color: var(--destaque); }
-.no-codigo[open] { border: 1px solid var(--borda); border-radius: 8px; background: var(--superficie); padding: 8px 12px 10px; }
-.no-codigo pre.codigo { margin-top: 10px; }
-
-/* Linhas do código: cada linha é um bloco; as explicadas ganham destaque e um número na margem */
-pre.codigo { padding-left: 40px; }
-pre.codigo code { display: block; }
-.linha { display: block; position: relative; width: max-content; min-width: 100%; border-radius: 3px; }
-.linha.anotada { background: color-mix(in srgb, var(--destaque) 12%, transparent); cursor: help; }
-.linha.anotada::before {
-  content: attr(data-n); position: absolute; left: -30px; top: 0.2em;
-  width: 1.4em; height: 1.4em; border-radius: 50%; text-align: center;
-  background: var(--destaque); color: var(--destaque-texto); font: 700 0.68rem/1.4em var(--fonte-texto); font-style: normal;
-}
-.linha.ativa, .linha.anotada:hover { background: color-mix(in srgb, var(--destaque) 30%, transparent); }
-
-/* Lista "Como o código faz isso", com os mesmos números das linhas */
-ol.notas { margin: 4px 0 0; padding-left: 1.9em; font-size: 0.9rem; display: flex; flex-direction: column; gap: 3px; }
-ol.notas::before { content: "Como o código faz isso (passe o mouse ou toque em um item para destacar a linha):";
-  display: block; margin: 0 0 4px -1.9em; font-weight: 600; color: var(--texto-suave); font-size: 0.82rem; }
-ol.notas li { cursor: pointer; padding: 2px 6px; border-radius: 4px; max-width: none; }
-ol.notas li::marker { font-weight: 700; color: var(--destaque); }
-ol.notas li:hover, ol.notas li.ativa { background: color-mix(in srgb, var(--destaque) 14%, transparent); }
-
-/* Balão com a explicação de uma linha (posicionado pelo JavaScript) */
-.dica-codigo {
-  position: fixed; z-index: 50; max-width: min(420px, calc(100vw - 24px));
-  background: var(--texto); color: var(--fundo); padding: 8px 12px; border-radius: 8px;
-  font-size: 0.88rem; line-height: 1.45; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); pointer-events: none;
-}
-
-/* Figuras */
-.figura { margin: 18px 0; }
-.figura img { display: block; background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: 6px; }
-.figura img.estreita { max-width: 520px; width: 100%; }
-.figura figcaption { color: var(--texto-suave); font-size: 0.9rem; margin-top: 6px; max-width: 78ch; }
 .sem-imagem { padding: 14px; border: 1px dashed var(--borda); border-radius: 8px; color: var(--texto-suave); }
 
-/* Fluxo da visão geral */
-.fluxo { list-style: none; counter-reset: passo; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.fluxo li { counter-increment: passo; background: var(--superficie); border: 1px solid var(--borda); border-radius: 8px;
-  padding: 8px 12px; font-weight: 600; display: flex; flex-direction: column; }
-.fluxo li::before { content: counter(passo); font-size: 0.75rem; color: var(--destaque); }
-.fluxo small { font-weight: 400; color: var(--texto-suave); }
-
-/* Diagrama da arquitetura (HTML/CSS) */
-.diagrama { display: flex; align-items: center; gap: 8px; padding: 18px; margin: 14px 0; overflow-x: auto;
-  background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); }
-.diagrama .no { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--texto-suave); text-align: center; }
-.diagrama .quadro { width: var(--lado); height: var(--lado); display: grid; place-items: center; text-align: center;
-  background: color-mix(in srgb, var(--destaque) 18%, var(--superficie)); border: 2px solid var(--destaque);
-  border-radius: 4px; color: var(--texto); font: 600 0.72rem/1.2 var(--fonte-codigo); }
-.diagrama .vetor { width: 26px; height: 112px; display: grid; place-items: center; writing-mode: vertical-rl;
-  background: color-mix(in srgb, var(--verde) 18%, var(--superficie)); border: 2px solid var(--verde);
-  border-radius: 4px; color: var(--texto); font: 600 0.72rem var(--fonte-codigo); }
-.diagrama .vetor.curto { height: 64px; }
-.diagrama .vetor.saida { height: 40px; writing-mode: horizontal-tb; }
-.diagrama .seta { color: var(--texto-suave); font-size: 1.2rem; }
-
-/* Ciclo navegador <-> servidor */
-.ciclo { padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; }
-.lado { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-right: 6px; }
-.lado.navegador { background: color-mix(in srgb, var(--destaque) 20%, var(--superficie)); color: var(--destaque); }
-.lado.servidor { background: color-mix(in srgb, var(--verde) 20%, var(--superficie)); color: var(--verde); }
-
-/* Perguntas */
-.perguntas dt { font-weight: 600; margin-top: 12px; }
-.perguntas dd { margin: 4px 0 0 0; color: var(--texto-suave); }
-
 .rodape { border-top: 1px solid var(--borda); padding: 20px 0; color: var(--texto-suave); font-size: 0.88rem; background: var(--superficie); }
-
-/* Documentação no celular: índice no topo, em linha */
-@media (max-width: 900px) {
-  .docs-grade { grid-template-columns: 1fr; gap: 16px; }
-  .indice { position: static; max-height: none; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 12px 14px; }
-  .indice ol { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; padding-left: 0; list-style-position: inside; }
-}
-.lado.python { background: color-mix(in srgb, #b8860b 22%, var(--superficie)); color: #9a6b00; }
-@media (prefers-color-scheme: dark) { .lado.python { color: #e3b341; } }

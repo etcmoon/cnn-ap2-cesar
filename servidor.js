@@ -11,7 +11,6 @@ const { spawn } = require("node:child_process");
 
 const RAIZ = __dirname;
 const PASTA_WEB = path.join(RAIZ, "web");
-const PASTA_SRC = path.join(RAIZ, "src");
 const DATASET_DIR = process.env.DATASET_DIR || path.join(RAIZ, "dataset");   // mesma variável do src/config.py
 const CAMINHO_RESULTADOS = path.join(RAIZ, "modelo", "resultados.json");
 const CAMINHO_MODELO = path.join(RAIZ, "modelo", "modelo_cnn.npz");
@@ -41,7 +40,11 @@ function encerrarPython(motivo) {
 
 function iniciarPython() {
   // Abre "python -m src.servico"; os avisos do Python (stderr) aparecem direto neste terminal
-  python = spawn(caminhoDoPython(), ["-m", "src.servico"], { cwd: RAIZ, stdio: ["pipe", "pipe", "inherit"] });
+  python = spawn(caminhoDoPython(), ["-m", "src.servico"], {
+    cwd: RAIZ,
+    stdio: ["pipe", "pipe", "inherit"],
+    env: { ...process.env, PYTHONIOENCODING: "utf-8" },   // o DeepFace escreve emojis no log
+  });
   readline.createInterface({ input: python.stdout }).on("line", (linha) => {
     const resposta = JSON.parse(linha);             // cada linha é a resposta de um pedido
     const pedido = pendentes.get(resposta.id);
@@ -75,42 +78,43 @@ async function responderComPython(res, pedido) {
 
 // ======================= Funções da API =======================
 
+function fotosDaPasta(pasta) {
+  // Fotos aceitas pelo Python: .jpg, .jpeg, .png, .heic e .heif
+  return fs.readdirSync(pasta).filter((arquivo) => /\.(jpe?g|png|hei[cf])$/i.test(arquivo));
+}
+
+function sessaoDaFoto(arquivo) {
+  // Mesma regra do src/dados.py: "ana_s03_0042.jpg" -> 3; fotos antigas, sem "_sNN", são a captura 0
+  const achou = arquivo.match(/_s(\d+)_/);
+  return achou ? Number(achou[1]) : 0;
+}
+
 function listarDataset() {
-  // Lista os integrantes (subpastas de dataset/) e quantas fotos cada um tem, com as mesmas regras do Python:
-  // ignora pastas que começam com "." ou "_" e conta só .jpg, .jpeg, .png, .heic e .heif
+  // Lista os integrantes (subpastas de dataset/), quantas fotos e quantas capturas cada um tem.
+  // Ignora pastas que começam com "." ou "_", como o Python.
   if (!fs.existsSync(DATASET_DIR)) return [];
   return fs.readdirSync(DATASET_DIR, { withFileTypes: true })
     .filter((item) => item.isDirectory() && !/^[._]/.test(item.name))
     .map((item) => item.name).sort()
-    .map((nome) => ({
-      nome,
-      fotos: fs.readdirSync(path.join(DATASET_DIR, nome)).filter((arquivo) => /\.(jpe?g|png|hei[cf])$/i.test(arquivo)).length,
-    }));
+    .map((nome) => {
+      const fotos = fotosDaPasta(path.join(DATASET_DIR, nome));
+      return { nome, fotos: fotos.length, sessoes: new Set(fotos.map(sessaoDaFoto)).size };
+    });
 }
 
 function salvarFotos(nome, imagens) {
-  // Salva as fotos (JPEG em base64) em dataset/<nome>/, continuando a numeração já existente
+  // Salva as fotos (JPEG em base64) em dataset/<nome>/ como uma captura nova: "ana_s03_0042.jpg"
+  // (s03 = 3ª captura). A numeração das fotos continua a já existente.
   const pasta = path.join(DATASET_DIR, nome);
   fs.mkdirSync(pasta, { recursive: true });
-  const jaExistem = fs.readdirSync(pasta).filter((arquivo) => /\.(jpe?g|png|hei[cf])$/i.test(arquivo)).length;
+  const jaExistem = fotosDaPasta(pasta);
+  const sessao = String(Math.max(0, ...jaExistem.map(sessaoDaFoto)) + 1).padStart(2, "0");
   imagens.forEach((texto, i) => {
     const bytes = Buffer.from(texto.split(",")[1], "base64");      // tira o cabeçalho "data:image/jpeg;base64,"
-    const numero = String(jaExistem + i).padStart(4, "0");         // 7 -> "0007"
-    fs.writeFileSync(path.join(pasta, `${nome}_${numero}.jpg`), bytes);
+    const numero = String(jaExistem.length + i).padStart(4, "0");  // 7 -> "0007"
+    fs.writeFileSync(path.join(pasta, `${nome}_s${sessao}_${numero}.jpg`), bytes);
   });
   return pasta;
-}
-
-function extrairFuncao(texto, funcao, ehPython) {
-  // Recorta o código de uma função do arquivo. Python: de "def nome(" até a próxima linha sem recuo.
-  // JavaScript: de "function nome(" até a linha "}".
-  const linhas = texto.replace(/\r\n/g, "\n").split("\n");
-  const comeco = ehPython ? new RegExp(`^def ${funcao}\\(`) : new RegExp(`^(async )?function ${funcao}\\(`);
-  const inicio = linhas.findIndex((linha) => comeco.test(linha));
-  if (inicio < 0) return null;
-  let fim = inicio + 1;
-  while (fim < linhas.length && (ehPython ? linhas[fim] === "" || /^\s/.test(linhas[fim]) : linhas[fim - 1] !== "}")) fim++;
-  return linhas.slice(inicio, fim).join("\n").trimEnd();
 }
 
 // ======================= Rotas =======================
@@ -151,22 +155,7 @@ app.get("/api/resultados", (req, res) => {
   res.type("json").send(fs.readFileSync(CAMINHO_RESULTADOS, "utf-8"));
 });
 
-// Código-fonte real de uma função, para a documentação nunca ficar desatualizada.
-// Aceita os módulos de src/ (Python) e "servidor" (este arquivo).
-app.get("/api/codigo/:modulo/:funcao", (req, res) => {
-  const { modulo, funcao } = req.params;
-  const modulosPython = fs.readdirSync(PASTA_SRC).filter((a) => a.endsWith(".py") && a !== "__init__.py").map((a) => a.slice(0, -3));
-  let arquivo;
-  if (modulo === "servidor") arquivo = "servidor.js";
-  else if (modulosPython.includes(modulo)) arquivo = `src/${modulo}.py`;
-  else return res.status(404).json({ erro: "Módulo não encontrado." });
-
-  const codigo = /^\w+$/.test(funcao) && extrairFuncao(fs.readFileSync(path.join(RAIZ, arquivo), "utf-8"), funcao, arquivo.endsWith(".py"));
-  if (!codigo) return res.status(404).json({ erro: "Função não encontrada." });
-  res.json({ arquivo, funcao, codigo });
-});
-
-// Situação do dataset: fotos por integrante e se já existe um modelo treinado
+// Situação do dataset: fotos e capturas por integrante e se já existe um modelo treinado
 app.get("/api/dataset", (req, res) => {
   res.json({ integrantes: listarDataset(), minimo_fotos: MINIMO_FOTOS, modelo_treinado: fs.existsSync(CAMINHO_MODELO) });
 });

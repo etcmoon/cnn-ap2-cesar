@@ -36,3 +36,11 @@ def test_integrante_sem_fotos_nao_divide_por_zero():
     # Se alguém não aparece no teste nem é previsto, as métricas dele ficam 0 (e não NaN)
     m = calcular_metricas(np.array([[3, 0], [0, 0]]))
     assert not np.isnan(m["precisao"]).any() and not np.isnan(m["f1"]).any()
+
+
+def test_coluna_desconhecido_conta_como_fn_e_nao_como_fp():
+    # 2 integrantes + coluna "desconhecido": ana teve 1 foto rejeitada, bia teve 2
+    m = calcular_metricas(np.array([[4, 0, 1],
+                                    [1, 2, 2]]))
+    assert list(m["VP"]) == [4, 2] and list(m["FP"]) == [1, 0] and list(m["FN"]) == [1, 3]
+    assert m["acuracia"] == 6 / 10                                             # rejeitadas também são erros

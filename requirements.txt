@@ -1,7 +1,9 @@
 numpy>=1.26,<3
-opencv-python-headless>=4.8,<5    # o OpenCV 5 tirou o detector Haar (CascadeClassifier)
+opencv-contrib-python-headless>=4.8    # YuNet (detector de rostos); é o mesmo OpenCV que o DeepFace instala
 scikit-learn>=1.3
 pillow>=10
 pillow-heif>=0.18
-matplotlib>=3.8
+deepface>=0.0.93                       # emoções (instala o TensorFlow, ~1 GB)
+tf-keras                               # o DeepFace precisa dele com o TensorFlow 2.16+
+werkzeug                               # o DeepFace 0.0.103 importa, mas não declara
 pytest>=8

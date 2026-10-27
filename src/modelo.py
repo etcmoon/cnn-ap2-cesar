@@ -1,26 +1,27 @@
+# A CNN feita à mão em NumPy. A saída não é um softmax comum: a rede gera um EMBEDDING (a "assinatura" do rosto,
+# de tamanho 1) e compara com o "rosto médio" de cada integrante pelo cosseno. Se nenhum cosseno passa do limiar,
+# a pessoa é "desconhecida". No treino, a margem do CosFace obriga as fotos de cada pessoa a ficarem juntas.
 import os
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
 from src.config import IMG_SIZE
 
-FILTROS = (8, 16, 32)   # filtros de cada convolução: bordas -> texturas -> partes do rosto
-DENSA   = 64            # neurônios da camada densa
-DROPOUT = 0.5           # fração de neurônios desligados a cada passo do treino
 
-
-def iniciar_pesos(n_classes, gerador, tamanho=IMG_SIZE):
+def iniciar_pesos(n_classes, gerador, hp, tamanho=IMG_SIZE):
     # Pesos aleatórios com a inicialização de He (desvio sqrt(2 / entradas), feita para a ReLU): assim o sinal
     # não some nem explode ao atravessar as camadas. Os vieses começam em zero.
-    canais = (1,) + FILTROS
+    filtros = hp["filtros"]
+    canais = [1] + list(filtros)
     formas = {f"W{i + 1}": (3, 3, canais[i], canais[i + 1]) for i in range(3)}    # filtros 3x3
-    formas["W4"] = ((tamanho // 8) ** 2 * FILTROS[-1], DENSA)                     # 3 poolings: 64 -> 8
-    formas["W5"] = (DENSA, n_classes)
+    formas["W4"] = ((tamanho // 8) ** 2 * filtros[-1], hp["densa"])               # 3 poolings: 64 -> 8
+    formas["W5"] = (hp["densa"], n_classes)                                       # "rosto médio" de cada integrante
     params = {}
     for nome, forma in formas.items():
         entradas = int(np.prod(forma[:-1]))                                       # quantos valores entram em cada neurônio
         params[nome] = gerador.normal(0, np.sqrt(2 / entradas), forma).astype(np.float32)
-        params["b" + nome[1:]] = np.zeros(forma[-1], np.float32)
+        if nome != "W5":                                                          # o cosseno não tem viés
+            params["b" + nome[1:]] = np.zeros(forma[-1], np.float32)
     return params
 
 
@@ -58,24 +59,37 @@ def pool_backward(x, saida, d_saida):
     return (x == ampliar(saida)) * ampliar(d_saida)
 
 
+def normalizar(v, eixo):
+    # Divide cada vetor pelo seu tamanho: sobra só a direção (é o que o cosseno compara)
+    return v / (np.linalg.norm(v, axis=eixo, keepdims=True) + 1e-9)
+
+
 def softmax(pontuacoes):
     # Pontuações -> probabilidades que somam 1 (subtrair o máximo evita estouro na exponencial)
     e = np.exp(pontuacoes - pontuacoes.max(axis=1, keepdims=True))
     return e / e.sum(axis=1, keepdims=True)
 
 
-def softmax_entropia(pontuacoes, y):
-    # Erro (entropia cruzada média) e o seu gradiente em relação às pontuações: probabilidade - 1 na classe certa
-    p = softmax(pontuacoes)
+def cosface_entropia(cossenos, y, s, m):
+    # Erro do CosFace e o seu gradiente em relação aos cossenos.
+    # Pontuação = s * cosseno, mas na classe certa tiramos a margem m: para errar pouco, a foto precisa ficar
+    # MUITO mais perto do próprio integrante do que dos outros (não basta ganhar por pouco).
     linhas = np.arange(len(y))
-    perda = -np.mean(np.log(p[linhas, y] + 1e-9))
+    pontuacoes = s * cossenos
+    pontuacoes[linhas, y] -= s * m
+    p = softmax(pontuacoes)
+    # log da probabilidade sem passar por p (com s = 16, p da classe certa chega a 1e-9 no começo do treino)
+    maximo = pontuacoes.max(axis=1)
+    log_p = pontuacoes[linhas, y] - maximo - np.log(np.exp(pontuacoes - maximo[:, None]).sum(axis=1))
+    perda = -np.mean(log_p)
     p[linhas, y] -= 1
-    return perda, p / len(y)
+    return perda, s * p / len(y)
 
 
-def propagar(params, x, gerador=None):
-    # Passa um lote x (N, 64, 64, 1) pela rede e devolve as pontuações (N, classes).
-    # Com um gerador aleatório, é modo treino (dropout ligado). O cache guarda o que a retropropagação precisa.
+def propagar(params, x, dropout=0.0, gerador=None):
+    # Passa um lote x (N, 64, 64, 1) pela rede e devolve os cossenos (N, classes) entre o embedding de cada foto e o
+    # "rosto médio" de cada integrante. Com um gerador aleatório, é modo treino (dropout ligado).
+    # O cache guarda o que a retropropagação precisa.
     convs = []
     a = x
     for i in (1, 2, 3):
@@ -85,19 +99,28 @@ def propagar(params, x, gerador=None):
         a = s
     plano = a.reshape(len(a), -1)                                               # flatten: 8x8x32 -> 2048
     mascara = 1.0
-    if gerador is not None:                                                     # dropout "invertido": desliga
-        mascara = ((gerador.random(plano.shape) >= DROPOUT) / (1 - DROPOUT)).astype(plano.dtype)   # neurônios
+    if gerador is not None and dropout > 0:                                     # dropout "invertido": desliga
+        mascara = ((gerador.random(plano.shape) >= dropout) / (1 - dropout)).astype(plano.dtype)   # neurônios
     h_entrada = plano * mascara                                                 # e compensa a escala
-    h = np.maximum(h_entrada @ params["W4"] + params["b4"], 0)                  # densa + ReLU
-    pontuacoes = h @ params["W5"] + params["b5"]                                # 1 pontuação por classe
-    return pontuacoes, {"convs": convs, "forma": a.shape, "mascara": mascara, "h_entrada": h_entrada, "h": h}
+    h = h_entrada @ params["W4"] + params["b4"]                                 # densa = embedding
+    e = normalizar(h, 1)                                                        # embedding de tamanho 1
+    w = normalizar(params["W5"], 0)                                             # "rostos médios" de tamanho 1
+    cossenos = e @ w                                                            # 1 cosseno por integrante
+    return cossenos, {"convs": convs, "forma": a.shape, "mascara": mascara, "h_entrada": h_entrada,
+                      "h": h, "e": e, "w": w}
 
 
-def retropropagar(params, cache, d_pontuacoes, ate=None):
+def retropropagar(params, cache, d_cossenos, ate=None):
     # Regra da cadeia, da saída para a entrada: devolve os gradientes de todos os pesos.
     # Com ate="conv3" (ou conv1, conv2), para no meio e devolve o gradiente dos mapas dessa camada (Grad-CAM).
-    g = {"W5": cache["h"].T @ d_pontuacoes, "b5": d_pontuacoes.sum(axis=0)}
-    d_h = (d_pontuacoes @ params["W5"].T) * (cache["h"] > 0)                    # ReLU: só passa onde estava ativo
+    # Normalizar v -> v/|v| tem gradiente (d - v̂ (d · v̂)) / |v|: só a parte de d que muda a DIREÇÃO de v conta.
+    e, w = cache["e"], cache["w"]
+    d_w = e.T @ d_cossenos                                                      # cosseno = e · w
+    d_e = d_cossenos @ w.T
+    W5 = params["W5"]
+    g = {"W5": (d_w - w * (d_w * w).sum(axis=0, keepdims=True)) / (np.linalg.norm(W5, axis=0, keepdims=True) + 1e-9)}
+    h = cache["h"]
+    d_h = (d_e - e * (d_e * e).sum(axis=1, keepdims=True)) / (np.linalg.norm(h, axis=1, keepdims=True) + 1e-9)
     g["W4"], g["b4"] = cache["h_entrada"].T @ d_h, d_h.sum(axis=0)
     d = ((d_h @ params["W4"].T) * cache["mascara"]).reshape(cache["forma"])     # desfaz dropout e flatten
     for i in (3, 2, 1):
@@ -109,50 +132,68 @@ def retropropagar(params, cache, d_pontuacoes, ate=None):
     return g
 
 
-def passo_adam(params, grads, estado, taxa=0.001, b1=0.9, b2=0.999, eps=1e-8):
+def passo_adam(params, grads, estado, taxa=0.001, l2=0.0, b1=0.9, b2=0.999, eps=1e-8):
     # Otimizador Adam: cada peso anda contra o seu gradiente, com uma média móvel do gradiente (m, "inércia")
     # dividida pela raiz da média móvel do gradiente ao quadrado (v, adapta o passo de cada peso).
+    # l2 > 0 vira AdamW: a cada passo os pesos (não os vieses) também encolhem um pouco, o que segura a decoreba.
     t = estado["t"] = estado.get("t", 0) + 1
     for k in params:
         m = estado[k + "_m"] = b1 * estado.get(k + "_m", 0) + (1 - b1) * grads[k]
         v = estado[k + "_v"] = b2 * estado.get(k + "_v", 0) + (1 - b2) * grads[k] ** 2
-        params[k] -= (taxa * (m / (1 - b1 ** t)) / (np.sqrt(v / (1 - b2 ** t)) + eps)).astype(params[k].dtype)
+        passo = taxa * (m / (1 - b1 ** t)) / (np.sqrt(v / (1 - b2 ** t)) + eps)
+        if k.startswith("W"):
+            passo = passo + taxa * l2 * params[k]
+        params[k] -= passo.astype(params[k].dtype)
 
 
 def prever(params, X, lote=256):
-    # Probabilidades de cada classe para muitas fotos, em lotes (para não usar memória demais)
-    return np.concatenate([softmax(propagar(params, X[i:i + lote])[0]) for i in range(0, len(X), lote)])
+    # Cossenos de cada integrante para muitas fotos, em lotes (para não usar memória demais)
+    return np.concatenate([propagar(params, X[i:i + lote])[0] for i in range(0, len(X), lote)])
 
 
-def resumo_camadas(params):
-    # Cada camada com o formato da saída e o número de pesos (mostrado na documentação do site)
+def calibrar_limiar(cossenos, y, percentil):
+    # Limiar do "desconhecido": o cosseno que 95% (com percentil 5) das fotos VERDADEIRAS da validação alcançam
+    # com o próprio integrante. Só usa fotos dos integrantes: não precisamos de fotos de desconhecidos.
+    return float(np.percentile(cossenos[np.arange(len(y)), y], percentil))
+
+
+def decidir(cossenos, limiar):
+    # Integrante mais parecido com cada foto, ou -1 ("desconhecido") se nem ele passa do limiar
+    return np.where(cossenos.max(axis=1) >= limiar, cossenos.argmax(axis=1), -1)
+
+
+def resumo_camadas(params, hp):
+    # Cada camada com o formato da saída e o número de pesos (impresso no terminal durante o treino)
     t, canais = IMG_SIZE, 1
     camadas = [{"nome": "entrada", "tipo": "Entrada", "saida": [t, t, 1], "parametros": 0}]
-    for i, f in enumerate(FILTROS, 1):
+    for i in (1, 2, 3):
+        f = params[f"W{i}"].shape[-1]
         camadas.append({"nome": f"conv{i}", "tipo": "Convolução 3x3 + ReLU", "saida": [t, t, f],
                         "parametros": 9 * canais * f + f})
         t, canais = t // 2, f
         camadas.append({"nome": f"pool{i}", "tipo": "Max pooling 2x2", "saida": [t, t, f], "parametros": 0})
-    n_classes = params["W5"].shape[1]
+    densa, n_classes = params["W5"].shape
     camadas += [{"nome": "flatten", "tipo": "Flatten", "saida": [t * t * canais], "parametros": 0},
-                {"nome": "dropout", "tipo": f"Dropout {DROPOUT}", "saida": [t * t * canais], "parametros": 0},
-                {"nome": "densa", "tipo": "Densa + ReLU", "saida": [DENSA], "parametros": params["W4"].size + DENSA},
-                {"nome": "saida", "tipo": "Densa + softmax", "saida": [n_classes],
-                 "parametros": params["W5"].size + n_classes}]
+                {"nome": "dropout", "tipo": f"Dropout {hp['dropout']}", "saida": [t * t * canais], "parametros": 0},
+                {"nome": "embedding", "tipo": "Densa + normalização", "saida": [densa],
+                 "parametros": params["W4"].size + densa},
+                {"nome": "cosseno", "tipo": f"Cosseno (CosFace s={hp['s']}, m={hp['m']})", "saida": [n_classes],
+                 "parametros": params["W5"].size}]
     return camadas
 
 
-def salvar_modelo(params, classes, caminho):
-    # Grava os pesos e os nomes dos integrantes num arquivo só. Grava num temporário e troca no fim:
+def salvar_modelo(params, classes, limiar, caminho):
+    # Grava os pesos, os nomes dos integrantes e o limiar num arquivo só. Grava num temporário e troca no fim:
     # o servidor nunca lê um arquivo pela metade.
     temporario = caminho + ".tmp.npz"
-    np.savez(temporario, classes=np.array(classes), **params)
+    np.savez(temporario, classes=np.array(classes), limiar=np.array(limiar), **params)
     os.replace(temporario, caminho)
 
 
 def carregar_modelo(caminho):
-    # Lê os pesos e os nomes dos integrantes (na ordem dos rótulos)
+    # Lê os pesos, os nomes dos integrantes (na ordem dos rótulos) e o limiar do "desconhecido"
     with np.load(caminho) as arquivo:
         classes = [str(nome) for nome in arquivo["classes"]]
-        params = {k: arquivo[k] for k in arquivo.files if k != "classes"}
-    return params, classes
+        limiar = float(arquivo["limiar"])
+        params = {k: arquivo[k] for k in arquivo.files if k not in ("classes", "limiar")}
+    return params, classes, limiar

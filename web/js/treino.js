@@ -1,9 +1,10 @@
 // Treino pelo site, sem precisar do terminal.
 // Mostra quantas fotos cada integrante tem, inicia o treino (o servidor roda "python -m src.treinar")
 // e acompanha o andamento consultando /api/treino a cada segundo: etapa, época, barra de progresso e log.
-// Usa esperar, enviarJSON e mostrarStatus de ao_vivo.js; no fim, chama carregarResultados de documentacao.js.
+// Usa esperar, enviarJSON e mostrarStatus de ao_vivo.js; no fim, chama carregarResultados de resultados.js.
 
 const RECOMENDADO = 150;      // fotos por pessoa recomendadas (abaixo disso, só um aviso)
+const CAPTURAS = 3;           // capturas por pessoa para o teste usar capturas que a rede nunca viu
 const botaoTreinar = document.getElementById("treinar");
 const botaoCancelar = document.getElementById("cancelar-treino");
 const statusTreino = document.getElementById("treino-status");
@@ -30,7 +31,7 @@ async function atualizarDataset() {
     linha.innerHTML = `<span></span><div class="barra-fundo"><div class="barra-cheia"></div></div><span></span>`;
     linha.children[0].textContent = i.nome;
     linha.children[1].firstChild.style.width = (i.fotos / maior * 100).toFixed(1) + "%";
-    linha.children[2].textContent = i.fotos;
+    linha.children[2].textContent = `${i.fotos} (${i.sessoes} cap.)`;
     tabela.appendChild(linha);
   });
 
@@ -40,7 +41,8 @@ async function atualizarDataset() {
   if (integrantes.length < 2) bloqueios.push("Colete fotos de pelo menos 2 integrantes.");
   integrantes.forEach((i) => {
     if (i.fotos < d.minimo_fotos) bloqueios.push(`${i.nome}: só ${i.fotos} foto(s); o mínimo é ${d.minimo_fotos}.`);
-    else if (i.fotos < RECOMENDADO) dicas.push(`${i.nome}: ${i.fotos} fotos. O recomendado é ${RECOMENDADO} ou mais, em sessões diferentes.`);
+    else if (i.fotos < RECOMENDADO) dicas.push(`${i.nome}: ${i.fotos} fotos. O recomendado é ${RECOMENDADO} ou mais, em capturas diferentes.`);
+    if (i.fotos && i.sessoes < CAPTURAS) dicas.push(`${i.nome}: ${i.sessoes} captura(s). Façam ${CAPTURAS} ou mais, em lugares e luzes diferentes: com menos, o teste fica otimista e o overfitting passa despercebido.`);
   });
   const menor = Math.min(...integrantes.map((i) => i.fotos));
   const maiorPessoa = Math.max(1, ...integrantes.map((i) => i.fotos));
@@ -133,20 +135,25 @@ function desenharTreino(estado) {
   if (!estado.rodando) return;
 
   statusTreino.hidden = true;
-  const etapa = ultima(estado.linhas, /^Etapa (\d)\/8: (.*)/);            // "Etapa 6/8: treinamento (até 150 épocas)"
+  const etapa = ultima(estado.linhas, /^Etapa (\d)\/8: (.*)/);            // "Etapa 5/8: treinamento (até 150 épocas)"
   const epoca = ultima(estado.linhas, /^Época (\d+)\/(\d+)/);             // "Época 12/150" (impresso por treinar_rede)
   const validacao = ultima(estado.linhas, /val_accuracy: ([\d.]+)/);      // acurácia na validação da última época
+  const fora = ultima(estado.linhas, /^Integrante de fora (\d+)\/(\d+): (.*)/);   // "Integrante de fora 2/5: treinando sem ana"
   const n = etapa ? Number(etapa[1]) : 0;
   const ep = epoca ? Number(epoca[1]) : 0;
   const total = epoca ? Number(epoca[2]) : 150;
 
-  // A etapa 6 (treinamento) é a mais demorada: ela ocupa de 10% a 90% da barra, conforme as épocas
-  const pct = n <= 5 ? n * 2 : n === 6 ? 10 + 80 * (ep / total) : n === 7 ? 92 : 96;
+  // As etapas demoradas são a 5 (treinamento: de 10% a 50% da barra, conforme as épocas) e a 7 (um treino a mais
+  // por integrante, sem ele: de 52% a 98%, conforme o integrante e as épocas)
+  const k = fora ? Number(fora[1]) - 1 : 0;
+  const pct = n <= 4 ? n * 2 : n === 5 ? 10 + 40 * (ep / total) : n === 6 ? 51
+    : n === 7 ? 52 + 46 * (fora ? (k + ep / total) / Number(fora[2]) : 0) : 99;
   document.getElementById("treino-barra").style.width = pct.toFixed(1) + "%";
   document.getElementById("treino-etapa").textContent = etapa ? `Etapa ${n} de 8: ${etapa[2]}` : "Iniciando o Python...";
 
   let detalhe = `Tempo: ${formatarTempo(Date.now() - estado.inicio)}`;
-  if (n === 6 && ep) {
+  if (n === 7 && fora) detalhe = `Integrante de fora ${fora[1]} de ${fora[2]}: ${fora[3]} · ${detalhe}`;
+  if ((n === 5 || (n === 7 && fora)) && ep) {
     detalhe = `Época ${ep} de ${total} (a parada antecipada pode parar antes)` +
       (validacao ? ` · acurácia na validação: ${(Number(validacao[1]) * 100).toFixed(0)}%` : "") + ` · ${detalhe}`;
   }
@@ -160,9 +167,10 @@ async function terminarTreino(estado) {
   if (estado.codigo === 0) {
     const r = await (await fetch("/api/resultados")).json();
     mostrarStatus(statusTreino, `Treino concluído em ${duracao}. Acurácia no teste: ` +
-      `${(r.acuracias.teste * 100).toFixed(1)}% (${r.totais.teste} fotos). A documentação abaixo já mostra os resultados novos.`);
+      `${(r.acuracias.teste * 100).toFixed(1)}% (${r.totais.teste} fotos). Veja tudo em “Ver resultados do treino”.`);
     historico = [];              // ao_vivo.js: os integrantes podem ter mudado
-    carregarResultados();        // documentacao.js: tabelas e imagens do treino novo
+    historicoEmocoes = [];
+    carregarResultados();        // resultados.js: matriz e métricas do treino novo
   } else if (cancelado) {
     mostrarStatus(statusTreino, "Treino cancelado. O modelo anterior continua valendo.", true);
   } else {

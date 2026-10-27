@@ -25,8 +25,8 @@ node_modules/
 dataset/*
 !dataset/.gitkeep
 
-# Gerados pelo treino (python -m src.treinar): o modelo e as imagens mostram os rostos do grupo
+# Gerados pelo treino e pela busca de hiperparâmetros (o modelo é treinado com os rostos do grupo).
+# O detector de rostos YuNet (OpenCV Zoo) fica no repositório.
 modelo/*
 !modelo/.gitkeep
-web/img/resultados/*
-!web/img/resultados/.gitkeep
+!modelo/face_detection_yunet_2023mar.onnx

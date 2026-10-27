@@ -17,6 +17,7 @@ from src.dados import imagem_de_dataurl
 from src.modelo import carregar_modelo, prever
 from src.preprocessamento import preprocessar
 from src.reconhecimento import reconhecer_quadro, grad_cam
+from src.emocao import EMOCOES, aquecer
 
 MSG_SEM_MODELO = "O modelo ainda não foi treinado: rode `python -m src.treinar` primeiro."
 
@@ -30,8 +31,8 @@ def obter_modelo():
         return None
     data = os.path.getmtime(CAMINHO_MODELO)
     if cache["data"] != data:
-        params, classes = carregar_modelo(CAMINHO_MODELO)
-        cache.update(data=data, params=params, classes=classes)
+        params, classes, limiar = carregar_modelo(CAMINHO_MODELO)
+        cache.update(data=data, params=params, classes=classes, limiar=limiar)
     return cache
 
 
@@ -43,18 +44,19 @@ def png_base64(matriz):
 
 
 def reconhecer(m, pedido):
-    # Reconhecimento ao vivo: acha os rostos do quadro e devolve as probabilidades de cada um
+    # Reconhecimento ao vivo: acha os rostos do quadro e devolve os cossenos e as emoções de cada um
     quadro = imagem_de_dataurl(pedido["imagem"])
-    return {"caixas": reconhecer_quadro(m["params"], quadro), "classes": m["classes"]}
+    return {"caixas": reconhecer_quadro(m["params"], quadro), "classes": m["classes"], "limiar": m["limiar"],
+            "emocoes": list(EMOCOES.values())}
 
 
 def etapas(m, pedido):
-    # Botão "Ver o que a rede vê": as etapas do pré-processamento, o Grad-CAM e a previsão
+    # Botão "Ver o que a rede vê": as etapas do pré-processamento, o Grad-CAM e o cosseno com cada integrante
     quadro = imagem_de_dataurl(pedido["imagem"])
     entrada, imagens = preprocessar(quadro, mostrar_etapas=True)      # imagens = [cinza, 1, 2, 3, 4, 5]
     if entrada is None:
         return {"erro": "Nenhum rosto encontrado no quadro: olhe de frente para a câmera.", "status": 422}
-    probs = prever(m["params"], entrada[np.newaxis])[0]
+    cossenos = prever(m["params"], entrada[np.newaxis])[0]
 
     # Grad-CAM: mapa de calor colorido (escala "jet") misturado com a imagem de entrada em cinza
     calor, _ = grad_cam(m["params"], entrada)
@@ -64,8 +66,9 @@ def etapas(m, pedido):
     return {
         "etapas": [png_base64(img) for img in imagens[1:5]] + [png_base64(entrada[:, :, 0] * 255)],
         "gradcam": png_base64(mistura),
-        "probabilidades": probs.tolist(),
+        "similaridades": cossenos.tolist(),
         "classes": m["classes"],
+        "limiar": m["limiar"],
     }
 
 
@@ -83,7 +86,8 @@ def atender(pedido):
 def main():
     sys.stdout = sys.stderr                # qualquer outro print vai para o terminal,
                                            # e o stdout fica só para as respostas ao Node
-    obter_modelo()                         # já carrega o modelo, para o primeiro pedido não demorar
+    obter_modelo()                         # já carrega o modelo e o de emoções, para o primeiro pedido não demorar
+    aquecer()
     print("Python pronto para receber pedidos.")
     for linha in sys.stdin:                # espera pedidos até o Node fechar o processo
         pedido = json.loads(linha)
