@@ -22,7 +22,24 @@ def detectar_rostos(cinza):
     lado_minimo = max(24, int(0.1 * min(menor.shape)))                  # ignora "rostos" minúsculos (falsos)
     rostos = DETECTOR.detectMultiScale(menor, scaleFactor=1.1, minNeighbors=5, minSize=(lado_minimo, lado_minimo))
     caixas = [tuple(int(v / escala) for v in caixa) for caixa in rostos]
-    return sorted(caixas, key=lambda caixa: -caixa[2])
+    return remover_sobrepostas(sorted(caixas, key=lambda caixa: -caixa[2]))
+
+
+def remover_sobrepostas(caixas, limite=0.5):
+    # O detector às vezes acha o MESMO rosto duas vezes (o rosto inteiro e uma caixa menor na metade de baixo).
+    # Percorre do maior para o menor e descarta a caixa que tem mais da metade da área dentro de uma já aceita.
+    # Rostos de pessoas diferentes quase não se sobrepõem, então continuam todos.
+    def fracao_dentro(menor, maior):
+        x1, y1, l1, _ = menor
+        x2, y2, l2, _ = maior
+        largura = max(0, min(x1 + l1, x2 + l2) - max(x1, x2))
+        altura = max(0, min(y1 + l1, y2 + l2) - max(y1, y2))
+        return largura * altura / l1 ** 2
+    aceitas = []
+    for caixa in caixas:
+        if all(fracao_dentro(caixa, outra) <= limite for outra in aceitas):
+            aceitas.append(caixa)
+    return aceitas
 
 
 def mascara_oval(tamanho, escala=1.0):

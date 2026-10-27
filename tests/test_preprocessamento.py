@@ -4,8 +4,16 @@ import numpy as np
 import pytest
 
 from src.config import IMG_SIZE
-from src.preprocessamento import preprocessar, tratar_rosto, mascara_oval, aplicar_mascara_oval
+from src.preprocessamento import preprocessar, tratar_rosto, mascara_oval, aplicar_mascara_oval, remover_sobrepostas
 from src.aumento import aumentar
+
+
+def test_remover_sobrepostas_tira_o_mesmo_rosto_repetido_e_mantem_pessoas_diferentes():
+    rosto = (202, 98, 271, 271)
+    metade_de_baixo = (237, 218, 232, 232)      # caso real do dataset: mesmo rosto, caixa deslocada para baixo
+    outra_pessoa = (520, 100, 200, 200)         # ao lado, quase sem sobreposição
+    assert remover_sobrepostas([rosto, metade_de_baixo, outra_pessoa]) == [rosto, outra_pessoa]
+    assert remover_sobrepostas([]) == []
 
 
 @pytest.mark.parametrize("caixa", [(100, 50, 200, 200), (0, 0, 480, 480), (600, 400, 100, 100), (5, 5, 10, 10)])

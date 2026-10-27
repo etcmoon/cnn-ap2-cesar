@@ -1,7 +1,3 @@
-# A CNN, feita à mão: só NumPy, sem TensorFlow, Keras ou PyTorch.
-# Cada camada tem uma função "forward" (calcula a saída) e uma "backward" (calcula os gradientes pela regra da cadeia).
-# Arquitetura: 3 blocos (convolução 3x3 + ReLU + max pooling 2x2) -> dropout -> densa 64 + ReLU -> densa (1 por classe).
-# Os pesos ficam num dicionário {"W1": ..., "b1": ..., ...}, que é salvo direto com np.savez.
 import os
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view

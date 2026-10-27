@@ -369,7 +369,7 @@
                 <li data-trecho="lado_minimo = max(24, int(0.1 * min(menor.shape)))">Ignora “rostos” muito pequenos (menos de 10% da foto), que costumam ser falsos.</li>
                 <li data-trecho="rostos = DETECTOR.detectMultiScale(">O detector: <code>scaleFactor=1.1</code> testa janelas 10% maiores a cada passada; <code>minNeighbors=5</code> exige 5 detecções vizinhas para aceitar um rosto.</li>
                 <li data-trecho="caixas = [tuple(int(v / escala)">Volta as caixas para o tamanho da foto original.</li>
-                <li data-trecho="return sorted(caixas, key=lambda caixa: -caixa[2])">Ordena do maior rosto para o menor (no treino, usamos o maior).</li>
+                <li data-trecho="return remover_sobrepostas(sorted(caixas, key=lambda caixa: -caixa[2]))">Ordena do maior rosto para o menor (no treino, usamos o maior) e descarta caixas repetidas do mesmo rosto: uma caixa com mais da metade da área dentro de outra maior é jogada fora (<code>remover_sobrepostas</code>).</li>
               </ol>
             </details>
           </li>
